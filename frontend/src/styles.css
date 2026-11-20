@@ -1,0 +1,546 @@
+/* Tokens first, then one block per component. Dark mode flips the tokens only. */
+:root {
+  color-scheme: light dark;
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --sidebar-w: 320px;
+  --panel-w: 560px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --radius: 8px;
+  --radius-sm: 6px;
+  --control-h: 32px;
+  --bg: #ffffff;
+  --bg-sidebar: #f5f5f7;
+  --bg-canvas: #fafafa;
+  --bg-inset: rgba(0, 0, 0, 0.04);
+  --hover: rgba(0, 0, 0, 0.04);
+  --pressed: rgba(0, 0, 0, 0.08);
+  --hairline: rgba(0, 0, 0, 0.1);
+  --text: #1d1d1f;
+  --text-secondary: #6e6e73;
+  --text-tertiary: #86868b;
+  --accent: #007aff;
+  --accent-hover: #0071eb;
+  --accent-pressed: #0062cc;
+  --accent-text: #0062cc;
+  --accent-tint: rgba(0, 122, 255, 0.12);
+  --accent-ring: rgba(0, 122, 255, 0.3);
+  --danger: #d70015;
+  --dots: rgba(0, 0, 0, 0.12);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 2px 8px rgba(0, 0, 0, 0.06);
+  --shadow-raised: 0 2px 4px rgba(0, 0, 0, 0.08), 0 6px 16px rgba(0, 0, 0, 0.1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1e1e1e;
+    --bg-sidebar: #28282a;
+    --bg-canvas: #191919;
+    --bg-inset: rgba(255, 255, 255, 0.06);
+    --hover: rgba(255, 255, 255, 0.06);
+    --pressed: rgba(255, 255, 255, 0.1);
+    --hairline: rgba(255, 255, 255, 0.12);
+    --text: #f5f5f7;
+    --text-secondary: #a1a1a6;
+    --text-tertiary: #86868b;
+    --accent: #0a84ff;
+    --accent-hover: #2491ff;
+    --accent-pressed: #0070e0;
+    --accent-text: #409cff;
+    --accent-tint: rgba(10, 132, 255, 0.22);
+    --accent-ring: rgba(10, 132, 255, 0.45);
+    --danger: #ff6961;
+    --dots: rgba(255, 255, 255, 0.12);
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.4);
+    --shadow-raised: 0 2px 4px rgba(0, 0, 0, 0.5), 0 6px 16px rgba(0, 0, 0, 0.5);
+  }
+}
+
+/* Base */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font);
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* App shell */
+.app {
+  display: grid;
+  grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+  height: 100vh;
+  overflow: hidden;
+}
+
+.app--panel {
+  grid-template-columns: var(--sidebar-w) minmax(0, 1fr) var(--panel-w);
+}
+
+.sidebar {
+  padding: var(--space-4) var(--space-3);
+  overflow: auto;
+  background: var(--bg-sidebar);
+  border-right: 1px solid var(--hairline);
+}
+
+.sidebar__title {
+  margin: 0 var(--space-2) var(--space-4);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.section-label {
+  margin: var(--space-6) var(--space-2) var(--space-1);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary);
+}
+
+.canvas {
+  background: var(--bg-canvas);
+}
+
+.panel {
+  overflow: auto;
+  background: var(--bg);
+  border-left: 1px solid var(--hairline);
+}
+
+/* Text */
+.note {
+  margin: var(--space-2) 0 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.note--error {
+  color: var(--danger);
+}
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--control-h);
+  padding: 0 var(--space-4);
+  font-weight: 500;
+  color: #fff;
+  background: var(--accent);
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.btn:hover {
+  background: var(--accent-hover);
+}
+
+.btn:active {
+  background: var(--accent-pressed);
+}
+
+.btn:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+/* Add repo: input and button share one rounded field */
+.add-repo__field {
+  display: flex;
+  gap: var(--space-1);
+  padding: 3px;
+  background: var(--bg);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.add-repo__field:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+
+.add-repo__input {
+  flex: 1;
+  min-width: 0;
+  height: 26px;
+  padding: 0 var(--space-2);
+  background: transparent;
+  border: 0;
+  outline: 0;
+}
+
+.add-repo__input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.add-repo__field .btn {
+  height: 26px;
+  padding: 0 var(--space-3);
+  border-radius: 5px;
+}
+
+/* Repo source list */
+.source-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.source-list__row {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: 6px var(--space-2);
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.source-list__row:hover {
+  background: var(--hover);
+}
+
+.source-list__row:active {
+  background: var(--pressed);
+}
+
+.source-list__row[aria-pressed="true"] {
+  color: var(--accent-text);
+  background: var(--accent-tint);
+}
+
+.source-list__name {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.source-list__host {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.source-list__row[aria-pressed="true"] .source-list__host {
+  color: inherit;
+  opacity: 0.75;
+}
+
+/* Map canvas: React Flow reads these variables for edges and the dotted background */
+.canvas .react-flow {
+  --xy-background-color-default: var(--bg-canvas);
+  --xy-background-pattern-dots-color-default: var(--dots);
+  --xy-edge-stroke-default: var(--hairline);
+  --xy-edge-stroke-width-default: 1.5;
+}
+
+.canvas .react-flow__handle {
+  visibility: hidden;
+}
+
+/* Scope transitions: a card that becomes the scope slides to the root slot; new cards and edges fade in */
+.canvas .react-flow__node {
+  transition: transform 360ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.canvas .react-flow__node .area-card {
+  animation: card-in 320ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.canvas .react-flow__edge {
+  animation: fade-in 420ms ease-out both;
+}
+
+@keyframes card-in {
+  from {
+    opacity: 0;
+    transform: translateX(-16px) scale(0.96);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .canvas .react-flow__node,
+  .canvas .react-flow__node .area-card,
+  .canvas .react-flow__edge {
+    transition: none;
+    animation: none;
+  }
+}
+
+/* Breadcrumb over the canvas */
+.crumbs {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  background: var(--bg);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.crumbs__item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.crumbs__sep {
+  color: var(--text-tertiary);
+}
+
+.crumbs__link {
+  padding: 2px var(--space-2);
+  font-weight: 500;
+  color: var(--accent-text);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.crumbs__link:hover {
+  background: var(--hover);
+}
+
+.crumbs__link:disabled {
+  color: var(--text);
+  cursor: default;
+}
+
+.canvas .react-flow__node:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius);
+}
+
+.canvas .react-flow__controls {
+  --xy-controls-button-background-color-default: var(--bg);
+  --xy-controls-button-background-color-hover-default: var(--hover);
+  --xy-controls-button-color-default: var(--text-secondary);
+  --xy-controls-button-color-hover-default: var(--text);
+  --xy-controls-button-border-color-default: var(--hairline);
+  --xy-controls-box-shadow-default: var(--shadow);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.canvas .react-flow__minimap {
+  --xy-minimap-background-color-default: var(--bg-sidebar);
+  --xy-minimap-mask-background-color-default: var(--bg-inset);
+  --xy-minimap-node-background-color-default: var(--hairline);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+/* Area cards: the size comes from layout.ts (dagre and the DOM must agree), the look lives here */
+.area-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  height: 100%;
+  padding: var(--space-2) var(--space-3);
+  overflow: hidden;
+  text-align: left;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  transition: box-shadow 120ms ease, border-color 120ms ease, transform 120ms ease;
+}
+
+.react-flow__node:hover .area-card {
+  box-shadow: var(--shadow-raised);
+  transform: translateY(-1px);
+}
+
+.area-card__title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.area-card__name {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.area-card__count {
+  flex: none;
+  padding: 0 var(--space-2);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  color: var(--accent-text);
+  background: var(--accent-tint);
+  border-radius: 999px;
+}
+
+.area-card__desc {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  margin: 0;
+  overflow: hidden;
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--text-secondary);
+}
+
+.area-card--fallback {
+  border-style: dashed;
+}
+
+.area-card--fallback .area-card__count {
+  color: var(--text-secondary);
+  background: var(--bg-inset);
+}
+
+.area-card--selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-ring), var(--shadow);
+}
+
+.repo-card,
+.area-card--scope {
+  background: var(--bg-sidebar);
+}
+
+.repo-card {
+  cursor: default;
+}
+
+.repo-card .area-card__name,
+.area-card--scope .area-card__name {
+  color: var(--accent-text);
+}
+
+.area-card__back {
+  margin-right: var(--space-1);
+  color: var(--text-tertiary);
+}
+
+/* Node panel */
+.node-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.node-panel__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 48px;
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.node-panel__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.badge {
+  padding: 1px var(--space-2);
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 999px;
+}
+
+.badge--llm {
+  color: var(--accent-text);
+  background: var(--accent-tint);
+}
+
+.badge--folder {
+  color: var(--text-secondary);
+  background: var(--bg-inset);
+}
+
+.node-panel__body {
+  padding: var(--space-4);
+}
+
+.node-panel__description {
+  margin: 0 0 var(--space-3);
+  line-height: 1.5;
+}
+
+.path-list {
+  margin: 0 0 var(--space-4);
+  padding: var(--space-2) var(--space-3);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+  list-style: none;
+  background: var(--bg-inset);
+  border-radius: var(--radius);
+}
+
+.path-list li {
+  padding: 2px 0;
+  word-break: break-all;
+}
+
+.node-panel__frame {
+  flex: 1;
+  border: 0;
+  border-top: 1px solid var(--hairline);
+}
+
+.canvas__empty {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  margin: 0;
+}

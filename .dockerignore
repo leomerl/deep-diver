@@ -1,0 +1,11 @@
+# Secrets never go into an image; the key reaches the container as one environment variable at run time.
+.env
+.env.*
+.venv
+.git
+**/__pycache__
+.pytest_cache
+tests
+docs
+frontend/node_modules
+frontend/dist

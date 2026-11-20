@@ -1,0 +1,156 @@
+# Both workers run untrusted repo content: least privilege, and the internal network only.
+x-worker: &worker
+  build: {context: ., dockerfile: Dockerfile.worker}
+  networks: [sandbox]
+  read_only: true
+  # The only writable place. In memory and gone when the container stops; the size also caps a checkout.
+  tmpfs: ["/tmp:size=1g,mode=1777"]
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  mem_limit: 2g
+  cpus: 2
+  pids_limit: 256
+  environment:
+    DATABASE_URL: postgresql+psycopg://dd:dd@postgres:5432/dd
+    REDIS_URL: redis://redis:6379/0
+    LLM_GATEWAY_URL: http://gateway:8080
+    LLM_GATEWAY_KEY: ${LLM_GATEWAY_KEY:-}
+    SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in .env}  # decrypts users' GitHub tokens for private clones
+    S3_ENDPOINT: minio:9000
+    KROKI_URL: http://kroki:8000
+    # git and httpx read these; internal services skip the proxy.
+    HTTPS_PROXY: http://egress:3128
+    NO_PROXY: postgres,redis,minio,gateway,kroki
+  depends_on:
+    migrate: {condition: service_completed_successfully}
+    redis: {condition: service_healthy}
+    minio: {condition: service_healthy}
+    gateway: {condition: service_healthy}
+    egress: {condition: service_started}
+
+# The API image, shared by the api and migrate services.
+x-api: &api
+  build: {context: ., dockerfile: Dockerfile.api}
+  environment:
+    DATABASE_URL: postgresql+psycopg://dd:dd@postgres:5432/dd
+    REDIS_URL: redis://redis:6379/0
+    S3_ENDPOINT: minio:9000
+    SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in .env}
+    GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+    GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+
+services:
+  migrate:
+    # One-shot: brings the schema to head before the api and the workers start.
+    <<: *api
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      postgres: {condition: service_healthy}
+
+  api:
+    # The REST API plus the built frontend at http://localhost:8000.
+    <<: *api
+    ports: ["8000:8000"]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+      minio: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/auth/me')"]
+      interval: 2s
+      retries: 15
+
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: dd
+      POSTGRES_PASSWORD: dd
+      POSTGRES_DB: dd
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    networks: [default, sandbox]
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "dd"]
+      interval: 2s
+      retries: 15
+
+  redis:
+    image: redis:7
+    # AOF everysec: lose at most ~1s of queue state on crash.
+    # noeviction: Redis errors on full memory instead of silently dropping queue keys.
+    command: redis-server --appendonly yes --appendfsync everysec --maxmemory-policy noeviction
+    ports: ["6379:6379"]
+    volumes: [redisdata:/data]
+    networks: [default, sandbox]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      retries: 15
+
+  minio:
+    # S3-compatible object store for deep dive HTML; the app only speaks the S3 API, so real S3 is a config change.
+    # MinIO withdrew its own images from Docker Hub and Quay in 2025; Bitnami's legacy build is the same binary,
+    # frozen. Its entrypoint starts the server (API :9000, console :9001) and runs as uid 1001.
+    image: bitnamilegacy/minio:2025.7.23
+    environment:
+      MINIO_ROOT_USER: dd-minio
+      MINIO_ROOT_PASSWORD: dd-minio-secret
+    ports: ["9000:9000", "9001:9001"]
+    volumes: [miniodata:/bitnami/minio/data]
+    networks: [default, sandbox]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 2s
+      retries: 15
+
+  gateway:
+    # The AI gateway (app/gateway): the only service holding the Anthropic key.
+    build: {context: ., dockerfile: Dockerfile.gateway}
+    environment:
+      # Compose reads these from .env; only this variable crosses into the container, not the whole file.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:?set ANTHROPIC_API_KEY in .env}
+      GATEWAY_KEY: ${LLM_GATEWAY_KEY:-}
+    ports: ["8080:8080"]
+    networks: [default, sandbox]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 2s
+      retries: 15
+
+  kroki:
+    # Renders deep dive diagrams (Graphviz, Mermaid) to SVG on our side: the pages run no scripts, so the browser can't.
+    # Safe mode stays at its default, `secure`: model-written DOT can't make the renderer read local files.
+    image: yuzutech/kroki:0.36.0
+    networks: [default, sandbox]
+    environment:
+      KROKI_MERMAID_HOST: kroki-mermaid
+    ports: ["8001:8000"]
+    depends_on: [kroki-mermaid]
+
+  kroki-mermaid:
+    # Mermaid needs a headless browser, so Kroki runs it as a separate companion container.
+    image: yuzutech/kroki-mermaid:0.36.0
+
+  egress:
+    # The workers' only way out: HTTPS to the git hosts in squid.conf, everything else denied.
+    image: ubuntu/squid:6.6-24.04_beta
+    volumes: ["./egress/squid.conf:/etc/squid/squid.conf:ro"]
+    networks: [default, sandbox]
+
+  index-worker:
+    <<: *worker
+    command: ["python", "-m", "app.indexing.worker"]
+
+  deep-dive-worker:
+    <<: *worker
+    command: ["python", "-m", "app.deep_dive.worker"]
+
+networks:
+  # internal: no route to the outside. Services on both networks stay reachable from the host and from the workers.
+  sandbox:
+    internal: true
+
+volumes:
+  pgdata:
+  redisdata:
+  miniodata:

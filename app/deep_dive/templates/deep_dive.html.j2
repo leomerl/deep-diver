@@ -1,0 +1,246 @@
+{#- Text labels carry each callout's meaning; color and icon only repeat it. -#}
+{%- set callout_labels = {"tip": "Interview tip", "info": "Good to know", "warning": "Watch out"} -%}
+{%- set callout_icons = {"tip": "✓", "info": "i", "warning": "!"} -%}
+{%- set closing = answer.sections[-1] if answer.sections | length > 1 else none -%}
+{%- set body = answer.sections[:-1] if closing else answer.sections -%}
+{%- set all_blocks = answer.sections | map(attribute="blocks") | sum(start=[]) -%}
+{%- set excerpt_count = all_blocks | selectattr("type", "equalto", "code") | list | length -%}
+{%- set figure_count = all_blocks | selectattr("type", "in", ["diagram", "svg"]) | list | length -%}
+
+{%- macro toc() %}
+<ol>
+{%- for section in body %}
+<li><a href="#s{{ loop.index }}">{{ section.heading | inline_code }}</a></li>
+{%- endfor %}
+{%- if answer.tech_stack %}
+<li><a href="#tech-stack">Tech stack</a></li>
+{%- endif %}
+{%- if answer.interview_questions %}
+<li><a href="#quiz">Test yourself ({{ answer.interview_questions | length }} questions)</a></li>
+{%- endif %}
+{%- if closing %}
+<li><a href="#s{{ answer.sections | length }}">{{ closing.heading | inline_code }}</a></li>
+{%- endif %}
+</ol>
+{%- endmacro %}
+
+{%- macro blocks(section) %}
+{%- for block in section.blocks %}
+{%- if block.type == "paragraph" %}
+<p>{{ block.text | inline_code }}</p>
+{%- elif block.type == "callout" %}
+<aside class="callout {{ block.kind }}"><p class="callout-label"><span class="icon" aria-hidden="true">{{ callout_icons[block.kind] }}</span>{{ callout_labels[block.kind] }}</p><p>{{ block.text | inline_code }}</p></aside>
+{%- elif block.type == "code" %}
+<figure class="code">
+<figcaption><code class="where">{{ block.path }}:{{ block.start_line }}-{{ block.end_line }}</code><span>{{ block.caption | inline_code }}</span></figcaption>
+<pre tabindex="0"><code>
+{%- for number, line in excerpt_lines(block) %}<span class="ln">{{ number }}</span>{{ line }}
+{% endfor -%}
+</code></pre>
+</figure>
+{%- elif block.type in ("diagram", "svg") %}
+<figure class="diagram">
+<div class="panel"><img src="{{ block.svg | svg_data_uri }}" alt="{{ block.caption }}"></div>
+<figcaption>{{ block.caption | inline_code }}</figcaption>
+</figure>
+{%- endif %}
+{%- endfor %}
+{%- endmacro %}
+
+{%- macro tech_stack() %}
+<section id="tech-stack" class="tech-stack">
+<h2>Tech stack</h2>
+{%- for tech in answer.tech_stack %}
+<article class="tech">
+<h3>{{ tech.name | inline_code }}</h3>
+<p class="role">{{ tech.role | inline_code }}</p>
+<div class="pros-cons">
+<div class="pros"><h4><span class="icon" aria-hidden="true">+</span>Pros</h4><ul>{% for pro in tech.pros %}<li>{{ pro | inline_code }}</li>{% endfor %}</ul></div>
+<div class="cons"><h4><span class="icon" aria-hidden="true">−</span>Cons</h4><ul>{% for con in tech.cons %}<li>{{ con | inline_code }}</li>{% endfor %}</ul></div>
+</div>
+<h4>Alternatives</h4>
+<dl class="alts">{% for alt in tech.alternatives %}<div><dt>{{ alt.name | inline_code }}</dt><dd>{{ alt.trade_off | inline_code }}</dd></div>{% endfor %}</dl>
+<h4>How it fits the design</h4>
+<p>{{ tech.fit | inline_code }}</p>
+</article>
+{%- endfor %}
+</section>
+{%- endmacro -%}
+
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="{{ csp }}">
+<title>{{ answer.title }}</title>
+<style>
+  :root { color-scheme: light dark;
+          --fg: #1f2328; --muted: #59636e; --bg: #fff; --surface: #f6f8fa; --border: #d1d9e0; --accent: #0969da;
+          --tip: #1a7f37; --info: #0969da; --warning: #7d4e00; }
+  @media (prefers-color-scheme: dark) {
+    :root { --fg: #e6edf3; --muted: #9198a1; --bg: #0d1117; --surface: #151b23; --border: #3d444d; --accent: #4493f8;
+            --tip: #3fb950; --info: #4493f8; --warning: #d29922; }
+  }
+  @media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 1.0625rem/1.7 system-ui, -apple-system, "Segoe UI", sans-serif;
+         -webkit-text-size-adjust: 100%; overflow-wrap: break-word; }
+  a { color: var(--accent); text-underline-offset: .15em; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+  .skip { position: absolute; left: -999px; top: .5rem; padding: .5rem .75rem; background: var(--bg); }
+  .skip:focus { left: .5rem; z-index: 1; }
+
+  .page { max-width: 76rem; margin: 0 auto; padding: 1.5rem 1rem 5rem; }
+  main { max-width: 44rem; counter-reset: sec; }
+  main > section { counter-increment: sec; scroll-margin-top: 1rem; }
+
+  /* Orientation: a contents list that stays in view on wide screens and folds away on phones. */
+  .toc-side { display: none; }
+  .toc ol { margin: 0; padding-left: 2.2em; list-style: decimal-leading-zero; font-size: .9rem; line-height: 1.45; }
+  .toc li { margin: .35rem 0; color: var(--muted); }
+  .toc a { color: var(--fg); text-decoration: none; }
+  .toc a:hover { color: var(--accent); text-decoration: underline; }
+    .toc-title { margin: 0 0 .5rem; font-size: .8rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .toc-top { margin: 1.5rem 0 0; padding: .6rem 1rem; border: 1px solid var(--border); border-radius: 8px; }
+  .toc-top summary { cursor: pointer; font-weight: 600; }
+  .toc-top ol { margin-top: .5rem; }
+  @media (min-width: 64rem) {
+    .page { display: grid; grid-template-columns: 15rem minmax(0, 44rem); gap: 3.5rem; justify-content: center; }
+    .toc-side { display: block; position: sticky; top: 1.5rem; align-self: start; max-height: calc(100vh - 3rem); overflow-y: auto; padding-top: .4rem; }
+    .toc-top { display: none; }
+  }
+
+  .eyebrow { margin: 0; font-size: .8rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  h1 { margin: .3rem 0 .5rem; font-size: clamp(1.75rem, 5vw, 2.3rem); line-height: 1.2; letter-spacing: -.01em; }
+  .meta { margin: 0; color: var(--muted); font-size: .95rem; }
+  .goals { margin: 1.5rem 0 0; padding: 1rem 1.25rem; background: var(--surface); border-radius: 8px; }
+  .goals h2 { margin: 0 0 .4rem; font-size: 1rem; }
+  .goals ul { margin: 0; padding-left: 1.2rem; }
+  .goals li { margin: .2rem 0; }
+
+  h2 { margin: 3.5rem 0 1rem; font-size: 1.5rem; line-height: 1.3; letter-spacing: -.005em; }
+  main > section > h2::before { content: counter(sec, decimal-leading-zero); content: counter(sec, decimal-leading-zero) / "";
+                                display: block; font-size: .85rem; font-weight: 600; color: var(--muted); letter-spacing: .04em; }
+  section:target > h2 { color: var(--accent); }
+  h3 { margin: 0 0 .25rem; font-size: 1.2rem; }
+  h4 { margin: 1.25rem 0 .4rem; font-size: .95rem; }
+  p { margin: 0 0 1rem; }
+  code { font: .88em/1.5 ui-monospace, "Cascadia Code", Consolas, monospace; background: var(--surface); padding: .1em .3em; border-radius: 4px; }
+
+  /* Code figures: say where the code lives and what to look for before showing it. */
+  .code { margin: 1.75rem 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .code figcaption { display: flex; flex-wrap: wrap; gap: .25rem .75rem; align-items: baseline; padding: .55rem 1rem;
+                     border-bottom: 1px solid var(--border); font-size: .9rem; color: var(--muted); }
+  .code .where { padding: 0; background: none; color: var(--fg); font-weight: 600; }
+  pre { margin: 0; padding: .9rem 1rem; overflow-x: auto; background: var(--surface); font-size: .95rem; line-height: 1.55; }
+  pre code { padding: 0; background: none; }
+  .ln { display: inline-block; width: 3.5ch; margin-right: 1.25ch; color: var(--muted); text-align: right; user-select: none; }
+
+  /* Diagrams: Mermaid and Graphviz draw for a light background, so the panel stays white in dark mode too.
+     Natural size, never shrunk to the column: a wide sequence diagram scaled to 44rem has unreadable labels.
+     A wide one scrolls sideways inside its panel; the caption stays put. */
+  .diagram { margin: 1.75rem 0; }
+  .diagram .panel { overflow-x: auto; padding: .75rem; background: #fff; border: 1px solid var(--border); border-radius: 8px; }
+  .diagram img { display: block; margin: 0 auto; max-width: none; }
+  .diagram figcaption { margin-top: .5rem; text-align: center; font-size: .9rem; color: var(--muted); }
+
+  .callout { --c: var(--info); margin: 1.75rem 0; padding: .8rem 1.1rem; border-left: 4px solid var(--c); border-radius: 0 8px 8px 0;
+             background: color-mix(in srgb, var(--c) 9%, var(--bg)); }
+  .callout p { margin: 0; }
+  .callout .callout-label { display: flex; align-items: center; gap: .5rem; margin-bottom: .3rem; color: var(--c);
+                            font-size: .8rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+  .icon { display: inline-grid; place-items: center; width: 1.3em; height: 1.3em; border-radius: 50%; background: var(--c, var(--fg));
+          color: var(--bg); font-size: .85em; font-weight: 700; line-height: 1; text-transform: none; }
+  .tip { --c: var(--tip); } .info { --c: var(--info); } .warning { --c: var(--warning); }
+
+  .tech { margin: 1.25rem 0; padding: 1.25rem; border: 1px solid var(--border); border-radius: 8px; }
+  .tech .role { color: var(--muted); }
+  .pros-cons { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: 1rem; margin-top: 1rem; }
+  .pros-cons > div { padding: .75rem 1rem; border-radius: 8px; background: var(--surface); }
+  .pros-cons h4 { display: flex; align-items: center; gap: .5rem; margin-top: 0; }
+  .pros { --c: var(--tip); } .cons { --c: var(--warning); }
+  .tech ul { margin: 0; padding-left: 1.2rem; }
+  .tech li { margin: .3rem 0; }
+  .alts { margin: 0; border-top: 1px solid var(--border); }
+  .alts > div { padding: .6rem 0; border-bottom: 1px solid var(--border); }
+  .alts dt { font-weight: 600; }
+  .alts dd { margin: .1rem 0 0; }
+  @media (min-width: 40rem) { .alts > div { display: grid; grid-template-columns: 11rem 1fr; gap: 1rem; } .alts dd { margin: 0; } }
+
+  /* Self-quiz: the answer stays folded until the reader has tried to recall it. */
+  .quiz-intro { color: var(--muted); }
+  .question { margin: 1rem 0; padding: 1rem 1.25rem; border: 1px solid var(--border); border-radius: 8px; scroll-margin-top: 1rem; }
+  .question h3 { margin-bottom: .75rem; font-size: 1.1rem; line-height: 1.4; }
+  .question summary { cursor: pointer; width: fit-content; padding: .35rem .8rem; border: 1px solid var(--accent); border-radius: 999px;
+                      color: var(--accent); font-weight: 600; font-size: .95rem; }
+  .question details[open] summary { margin-bottom: 1rem; }
+  .question details > p:last-child { margin-bottom: 0; }
+  .question:target { border-color: var(--accent); }
+
+  .summary { margin-top: 4rem; padding: .25rem 1.5rem 1rem; border-radius: 8px; background: var(--surface); border-top: 4px solid var(--accent); }
+  .summary > h2 { margin-top: 1rem; }
+
+  @media print {
+    .toc-side, .toc-top, .skip, .question summary { display: none; }
+    details::details-content { content-visibility: visible; display: block; }
+    .page { display: block; padding: 0; }
+    main { max-width: none; }
+    pre { white-space: pre-wrap; }
+    .diagram img { max-width: 100%; }
+    .code, .callout, .question, .tech { break-inside: avoid; }
+    h2, h3 { break-after: avoid; }
+  }
+</style>
+</head>
+<body>
+<a class="skip" href="#content">Skip to content</a>
+<div class="page">
+<nav class="toc toc-side" aria-label="Contents"><p class="toc-title">Contents</p>{{ toc() }}</nav>
+<main id="content">
+<header>
+<p class="eyebrow">Deep dive</p>
+<h1>{{ answer.title | inline_code }}</h1>
+<p class="meta">{{ reading_minutes }} min read · {{ answer.sections | length }} sections · {{ excerpt_count }} code excerpt{{ "s" if excerpt_count != 1 }} · {{ figure_count }} figure{{ "s" if figure_count != 1 }}</p>
+{%- if answer.interview_questions %}
+<div class="goals">
+<h2>By the end you can answer</h2>
+<ul>{% for item in answer.interview_questions %}<li><a href="#q{{ loop.index }}">{{ item.question | inline_code }}</a></li>{% endfor %}</ul>
+</div>
+{%- endif %}
+<details class="toc toc-top"><summary>Contents</summary>{{ toc() }}</details>
+</header>
+{%- for section in body %}
+<section id="s{{ loop.index }}">
+<h2>{{ section.heading | inline_code }}</h2>
+{{- blocks(section) }}
+</section>
+{%- endfor %}
+{%- if answer.tech_stack %}{{ tech_stack() }}{% endif %}
+{%- if answer.interview_questions %}
+<section id="quiz" class="quiz">
+<h2>Test yourself</h2>
+<p class="quiz-intro">Answer each question out loud, or write it down, before you open the answer. Pulling an answer from memory makes it stick far better than reading it again.</p>
+{%- for item in answer.interview_questions %}
+<article id="q{{ loop.index }}" class="question">
+<h3>{{ item.question | inline_code }}</h3>
+<details><summary>Show answer</summary>
+{%- for paragraph in item.answer | paragraphs %}
+<p>{{ paragraph | inline_code }}</p>
+{%- endfor %}
+</details>
+</article>
+{%- endfor %}
+</section>
+{%- endif %}
+{%- if closing %}
+<section id="s{{ answer.sections | length }}" class="summary">
+<p class="eyebrow">Key takeaways</p>
+<h2>{{ closing.heading | inline_code }}</h2>
+{{- blocks(closing) }}
+</section>
+{%- endif %}
+</main>
+</div>
+</body>
+</html>

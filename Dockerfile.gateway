@@ -1,0 +1,18 @@
+# The AI gateway service. Built from the repo root so it imports the same contract package as the app.
+FROM python:3.12-slim
+
+COPY --from=ghcr.io/astral-sh/uv:0.7.12 /uv /bin/uv
+
+# Non-root: the gateway only needs to read its code and talk to the network.
+RUN useradd --create-home gateway
+WORKDIR /srv
+
+# Dependencies first, so code changes don't reinstall them (layer cache).
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev --no-install-project
+
+COPY app ./app
+USER gateway
+
+EXPOSE 8080
+CMD ["/srv/.venv/bin/uvicorn", "app.gateway.main:app", "--host", "0.0.0.0", "--port", "8080"]
