@@ -17,7 +17,13 @@ export function AddRepo({ onAdded }: Props) {
       onAdded((await addRepo(url)).url);
       setUrl("");
     } catch (err) {
-      setError(err instanceof ApiError && err.status === 503 ? "Queue unavailable, try again" : String(err));
+      setError(
+        err instanceof ApiError && err.status === 503
+          ? "The indexing queue is down. Try again in a minute."
+          : err instanceof ApiError
+            ? err.message
+            : "Could not add the repository. Check the URL and try again.",
+      );
     } finally {
       setBusy(false);
     }
@@ -25,6 +31,7 @@ export function AddRepo({ onAdded }: Props) {
 
   return (
     <form onSubmit={submit}>
+      <h3 className="section-label">From a URL</h3>
       <div className="add-repo__field">
         <input
           type="url"

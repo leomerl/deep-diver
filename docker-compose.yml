@@ -1,4 +1,6 @@
 # Both workers run untrusted repo content: least privilege, and the internal network only.
+# AGENT_RUNTIMES stays at its default (gateway) here: the sandbox has no Claude Code login, so these workers use the
+# gateway even when the dashboard setting says agent_sdk. Run a worker on the host for that.
 x-worker: &worker
   build: {context: ., dockerfile: Dockerfile.worker}
   networks: [sandbox]

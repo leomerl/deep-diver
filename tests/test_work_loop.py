@@ -1,8 +1,10 @@
+import importlib
 import threading
 import time
 from collections.abc import Callable, Iterator
 
 import pytest
+from redis.exceptions import TimeoutError
 
 from app.config import rds
 from app.queue import WorkLoopSettings, enqueue_once, ensure_group, work_loop
@@ -17,6 +19,8 @@ SETTINGS = WorkLoopSettings(
     stream=STREAM, group=GROUP, dlq_stream=DLQ, lease_s=0.1, max_deliveries=MAX_DELIVERIES, block_ms=10
 )
 DEADLINE_S = 5
+# The package re-exports the function under the module's name, so the module needs an explicit import.
+work_loop_module = importlib.import_module("app.queue.work_loop")
 POLL_S = 0.02
 
 
@@ -77,3 +81,20 @@ def test_stop_ends_an_idle_loop() -> None:
     stop.set()
     thread.join(DEADLINE_S)
     assert not thread.is_alive()
+
+
+def test_redis_outage_is_retried_not_fatal(monkeypatch: pytest.MonkeyPatch) -> None:
+    stop = threading.Event()
+    attempts: list[int] = []
+
+    def flaky_reclaim(*args: object) -> None:
+        attempts.append(1)
+        if len(attempts) == 1:
+            raise TimeoutError("Timeout reading from socket")
+        stop.set()
+
+    monkeypatch.setattr(work_loop_module, "reclaim_one", flaky_reclaim)
+    monkeypatch.setattr(work_loop_module, "REDIS_RETRY_S", 0)
+    work_loop(rds, SETTINGS, CONSUMER, lambda fields: None, stop)
+
+    assert len(attempts) == 2  # the loop came back after the error instead of propagating it

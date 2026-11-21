@@ -37,8 +37,8 @@ Two layers. The gateway's Redis dedup marker (`SET NX`) stops duplicate jobs. Po
 **Q: What stops a node from having two parents? And what doesn't stop a cycle?**
 A partial unique index on `edges(target_id) WHERE kind = 'contains'`: a node can be the target of at most one `contains` edge. It does not prevent cycles (`A contains B contains A`), and neither would a `parent_id` column. Cycles can't happen in v1 because only the indexer writes the tree, top-down from its own recursion, in one transaction, and the tree is never edited afterwards.
 
-**Q: How would you keep the tree safe once repos can be re-indexed?**
-Versioned snapshots: a re-index builds a new, immutable tree for the new commit in one transaction, and the repo points at its current version. The "built once, never edited" argument holds again per version, and deep dives keep pointing at the version they were made from, which gives staleness detection almost for free. Editing the tree in place would need a cycle check on every edge insert (a recursive CTE or a trigger).
+**Q: Repos can be re-indexed. How is the tree still safe?**
+Versioned snapshots: a re-index builds a new, immutable tree for the new commit in one transaction, and the repo points at its current snapshot. The "built once, never edited" argument holds again per snapshot, and deep dives keep pointing at the snapshot they were made from, which gives staleness detection almost for free. Editing the tree in place would need a cycle check on every edge insert (a recursive CTE or a trigger).
 
 **Q: Why store a node's paths as an array column and not a files table?**
 Paths are folder prefixes or files, always read and written with their node, and handed as-is to the deep dive's sparse checkout. Areas may overlap and there's no "each file exactly once" rule, so a join table would enforce nothing. `CHECK (cardinality(paths) > 0)` keeps the one rule that matters: an area with no paths would give a deep dive nothing to check out. If "which area covers file X?" becomes a query, a GIN index on the array handles it.
@@ -235,7 +235,7 @@ The goal is protecting the machine, not the gateway: an agent's tools (git grep,
 ## Deep dives
 
 **Q: Walk me through generating a deep dive.**
-`POST /nodes/{id}/deep-dive` queues `{node_id}` once (Lua `SET NX` + `XADD`) and returns 202. A worker skips the job if the node already has a row, sparse-clones only the node's paths at the repo's pinned commit, runs an agent over that checkout, renders the typed answer to HTML, uploads it to a bucket under `sha256(html).html`, inserts the row, then `XACK`s.
+`POST /nodes/{id}/deep-dive` queues `{node_id}` once (Lua `SET NX` + `XADD`) and returns 202. A worker skips the job if the node already has a row, sparse-clones only the node's paths at its snapshot's commit, runs an agent over that checkout, renders the typed answer to HTML, uploads it to a bucket under `sha256(html).html`, inserts the row, then `XACK`s.
 
 **Q: Why does the model return a typed answer and not HTML?**
 Three reasons. Safety: repo files can carry prompt injection, and model-written HTML could smuggle a `<script>` into a page we serve. Truth: code excerpts are a path + line range that our code copies from the checkout, so the model can't invent code. Control: one template means a consistent look, and new media is a new block type, not a prompt change.
@@ -387,7 +387,7 @@ An index job can run for many minutes. A lease sized to the longest job would le
 The reaper gives the job to another worker. When the first one wakes, its renewal script sees with `XPENDING` that it no longer owns the entry, so it doesn't steal it back (a plain `XCLAIM` would), logs a warning and finishes. Two workers then run the same job, which costs money but not data, because both end in an insert-once write.
 
 **Q: Then what stops a zombie from overwriting newer work? Where's your fencing token?**
-There's nothing to overwrite. Every final write is `INSERT … ON CONFLICT DO NOTHING` on a unique key (`repos.url`, `deep_dives.node_id`). The first commit wins and the late one does nothing; the deep dive's object key is the hash of its content, so even a zombie's upload is harmless. A fencing token (reject writes with a lower attempt number) is needed when writes *update* shared state. If re-indexing ever updates a repo in place, that's when it comes back.
+Almost nothing is overwritten. Final writes are `INSERT … ON CONFLICT DO NOTHING` on a unique key (`repos.url`, `snapshots(repo_id, commit_sha)`, `deep_dives.node_id`). The first commit wins and the late one does nothing; the deep dive's object key is the hash of its content, so even a zombie's upload is harmless. The one overwrite is the repo's current-snapshot pointer, and that one has a fence: `head_seen_at`, see "Re-indexing".
 
 **Q: Why is the retry delay a full lease? Isn't that slow?**
 It's free backoff: a failed job is simply left un-acked, and the reaper picks it up once it's been idle for a lease. A failure that's caused by the gateway being down or overloaded gets a minute to recover instead of being hammered. No timers or retry scheduler.
@@ -510,3 +510,133 @@ The conversion layer is pure and has unit tests: schema and description come thr
 
 **Q: What does the SDK give you that your own loop does not, and what does it cost?**
 It keeps thinking blocks across turns (the gateway contract drops them), caches prompts automatically, retries API errors, and it is less loop code to own. It costs a 0.2.x dependency whose API moves, a Node binary per agent run, no control over caching or per-turn requests, and a client-side cost estimate instead of real usage.
+
+---
+
+## Library and practice pages
+
+**Q: Why does each list item carry the node name and repo URL instead of just ids?**
+The page needs them to label and group every row. Ids alone would mean one more request per row, or a second call to join on the client. The join is one SQL statement on primary keys. The item class extends the existing `XRead` and adds only those labels, so the shared fields are declared once.
+
+**Q: Why no pagination?**
+It is one person's bank: tens of deep dives and a few hundred questions. Pagination would add a cursor, a "load more" control, and server-side filtering, for no visible gain. The endpoints carry a TODO with the trigger: a cursor on `created_at` once the list passes a few hundred rows.
+
+**Q: Why an index on `deep_dives.created_at` for such a small table?**
+The project rule is an index for every query the API makes, so the plan does not change when the table grows. At today's size Postgres will still pick a sequential scan, and that is fine. The cost is one more index to update on each insert, and deep dives are inserted a few times a day.
+
+**Q: How do you shuffle the questions, and why not `sort(() => Math.random() - 0.5)`?**
+Each item gets one random key, and the copy is sorted by the keys. Every order is equally likely. A random comparator gives the sort inconsistent answers about the same pair, so some orders come out more often than others, depending on the engine's sort algorithm.
+
+**Q: Why tabs in React state and not react-router?**
+There are three views and no need yet for links to them. A router is a dependency, a route table and URL handling. The cost of skipping it: a refresh lands on the map, and you cannot bookmark the practice page. If links become useful, a hash value like the existing `#repo=` is the next step before a library.
+
+**Q: Why open a deep dive in a new tab from the list, but in an iframe on the map?**
+On the map the page sits next to the node it describes, so it is embedded. From the list, the page is the only thing you want to read, so it gets the whole window. Both load the same API route, which sends the CSP header, so the page runs no scripts either way.
+
+**Q: Why is practice stateless?**
+Tracking "got it / missed it" needs a table, a write endpoint, and a scheduling rule for when missed questions come back. Flashcards with a shuffle already cover the core job. Spaced repetition is the natural next step if the bank grows past what one sitting covers.
+
+**Q: How do the agents choose between your loop and the Agent SDK?**
+Through one Protocol, `AgentRunner`: system prompt, task, tools, answer schema, turn budget in; a validated answer or `AgentFailed` out. The three agents take a runner instead of a chat model. `make_runner` builds a small closure per runtime (`run_agent` with a `GatewayChatModel`, `run_agent_sdk` with the SDK wrapper) for every runtime the process's `AGENT_RUNTIMES` allows, and `dispatch_runner` wraps them in one runner that asks the dashboard setting which to use on each call. The factories for indexing and deep dives both call it, which also removed a duplicated model-construction helper.
+
+**Q: How does the dashboard switch the runtime without restarting anything?**
+The Settings page does `PUT /settings` with `{"agent_runtime": ...}`; the API stores it in one Redis key. Workers don't bind the runtime at startup: the runner they hold reads that key at the start of every agent call, one GET next to a model call that takes seconds. So the next agent, in a job already running, uses the new runtime. The GET and PUT share one Pydantic model, `AppSettings`, so the response and the body can't drift, and the frontend types come from the OpenAPI schema.
+
+**Q: Why Redis for the setting, not a table?**
+Same lifetime and same consumers as the agent slots and the dedup keys that are already there: the API writes, the workers read, and a missing key is a safe default. A table would add a model, a migration and a session per read for one toggle. If settings grow into something with history or per-user scope, that's the moment for a table.
+
+**Q: What happens when the dashboard says `agent_sdk` and a Docker worker takes the job?**
+`AGENT_RUNTIMES` says what a process may run; compose leaves it at `gateway`, so the Docker worker never builds the SDK runtime. When the setting asks for one it lacks, `dispatch_runner` logs a warning and uses the gateway. Failing the job instead would dead-letter it three retries later over a deployment mismatch. The cost of the fallback: with both a Docker worker and a host worker on the stream, the Docker one still bills the API key for the jobs it takes, so you stop the compose workers when everything should run on the login.
+
+**Q: Why parse the runtime names in `make_runner` and not in `app.config`?**
+An import cycle. `app.config` would import the enum from `app.agent`, whose package init imports `make_runner`, which imports `app.config` before it has defined the setting. So config keeps the comma-separated string and `make_runner` parses it into the `StrEnum` once at startup; a typo still fails before any job runs, which is what parsing in config would have bought.
+
+**Q: How do you keep the two runtimes behaving the same?**
+They share the nudge texts and the attempt limit from one module, raise the same `AgentFailed`, and validate the answer with the same Pydantic call and context. Explore's per-node fallback catches `AgentFailed` and the gateway's bad-answer error; an SDK process or API failure is a different exception on purpose, so it fails the job and the queue retries it, exactly like an unreachable gateway. One known difference: a follow-up in the SDK runtime gets a fixed `wrap_up_turns`, while `run_agent` gives whatever budget is left. That's a documented shortcut until the logs show agents that need more.
+
+**Q: How is the SDK runtime tested without the binary?**
+The SDK call is injected as a Protocol, so a scripted fake plays back results and records each call's prompt, turn budget and resume id. Tests cover a valid answer, a rejected answer that is fixed on resume, two rejections, out of turns with a wrap-up, a turn that ends without an answer and gets a nudge, no answer after the follow-up, and a missing session id. The plumbing itself was checked live by indexing a scratch repo on the host login.
+
+**Q: How are code excerpts syntax-highlighted when the page runs no scripts?**
+On the server, with Pygments, while the page is rendered. The CSP is `default-src 'none'`, so highlight.js or Prism could not run. Pygments emits `<span class="k">` style classes, and the colours for a custom Xcode-dark style (`XcodeDarkStyle`) are inlined into the page's `<style>`, scoped to `.code pre` so its global `pre` rules can't restyle the rest of the page.
+
+**Q: Why lex the whole file instead of just the excerpt lines?**
+An excerpt can start inside a docstring or a block comment. Lexed alone, that text would be coloured as code. The whole file is lexed once per path (cached), then the excerpt's lines are sliced out. Lexing with `stripnl=False` matters: by default Pygments strips leading blank lines, which would shift every line number.
+
+**Q: The highlighted HTML is marked safe with `Markup`. Isn't that an XSS hole?**
+Pygments escapes every token's text, and the HTML formatter closes each span at the end of its line, so splitting on newlines never cuts a tag in half. A test checks that `<` in source comes out as `&lt;` and that unknown file types fall back to escaped plain text. The CSP is still there as a second layer.
+
+**Q: Why do code panels follow the page theme instead of staying dark?**
+A tall black block on a white page is the heaviest thing on screen, and a deep dive has several. It pulled the eye away from the prose. Two palettes cost more colour checks, but Pygments makes that cheap: both use the same token classes (`k`, `s`, `c`), so the page ships both rule sets and `prefers-color-scheme` picks one. Diagrams can't do that: Mermaid draws for white, so their panel stays white in dark mode. In dark mode the white panel is dimmed slightly (`filter: brightness(.88)`), because the HIG says to soften white backgrounds that would glow against a dark page.
+
+**Q: Why doesn't inline code have a grey background like most docs sites?**
+The writer names a lot of identifiers, often eight or more per paragraph. With a box around each one, the paragraph read as confetti and nobody wanted to start reading it. The monospace face alone is enough to mark code; Apple's developer docs do the same.
+
+**Q: Diagrams were shown at natural size before. Why shrink them now?**
+The page mostly lives in a 560px side panel, so at natural size nearly every diagram scrolled sideways. Now they shrink to the column, but never below 45rem: under that, a sequence diagram's labels get too small to read, so a very wide one still scrolls inside its panel. Fullscreen gives it room.
+
+**Q: How do you get Apple's fonts without loading web fonts?**
+The CSP blocks font downloads, and SF Pro's licence doesn't allow serving it anyway. CSS has generic names that the browser maps to the platform's own fonts: `system-ui` is SF Pro on Apple devices, `ui-serif` is New York, `ui-monospace` is SF Mono. Each stack ends in fallbacks (Segoe UI, Consolas), so Windows gets its native fonts. The page uses one sans family for everything: a serif body next to monospace identifiers was three typefaces in one sentence.
+
+**Q: Why not use Apple's system blue, #007aff?**
+On white it's 4.02:1, under the 4.5:1 the HIG asks for normal text. The page uses #0066cc (5.57:1) in light mode and #2997ff (5.64:1 on the dark cards) in dark mode. Filled blue buttons take black text in dark mode, because white on #2997ff is only 3.0:1. Every colour pair was computed, not eyeballed.
+
+**Q: Why does blue appear only on links and buttons?**
+The HIG says not to use one colour to mean different things. Before, the accent marked links, the "Good to know" callout, the summary box, the current section and the contents hover. Now blue means "you can click this", and "Good to know" is grey. Each callout still carries a text label, so colour is never the only signal.
+
+**Q: Why write a Pygments style instead of using the built-in `xcode` one?**
+The built-in one is Xcode's light theme, and it's used in light mode. There's no built-in dark version, so the custom style takes its colours from Xcode's Default (Dark) theme, with one change: Xcode's comment grey is 3.7:1 on the panel, so it's lifted to 5.0:1. Pygments keeps the same short token classes (`k`, `s`, `c`), so pages already stored pick up the new colours as soon as they get the new stylesheet.
+
+**Q: The icons used to be text glyphs. How do stored pages get the new SVGs?**
+`restyle_html` upgrades a stored page in place: it swaps in the current stylesheet and replaces each old glyph span with the SVG from the same `icon()` helper the template uses, so the two can't drift. The icons are `aria-hidden`; the label next to each one ("Watch out") is what a screen reader reads.
+
+---
+
+## Focused deep dives and the whole-repo deep dive
+
+**Q: How do you stop an LLM writer from producing a wall of text?**
+Two layers. The prompt makes it choose first: name the three things the reader must leave with, and cut anything that doesn't serve them. Then a Pydantic validator enforces a budget: at most 5 sections, 900 words of paragraph and callout text, 4 callouts. An answer over the budget is rejected with the actual count and told to drop points, not shorten every sentence. The numbers live in constants that both the validator and the prompt read, so they can't disagree.
+
+**Q: Why a nullable `node_id` and not a root node in the tree?**
+The tree has no root node by design: top-level areas are nodes with no parent, and the repo row is the root. A fake root node would make every tree query filter it out. So a deep dive points at a repo always and at a node optionally; NULL means the whole repo.
+
+**Q: How do you enforce "one root deep dive per repo" when `node_id` is NULL?**
+A unique constraint on `node_id` doesn't, because Postgres treats NULLs as distinct. So there is a partial unique index on `snapshot_id WHERE node_id IS NULL` (one root page per snapshot, since re-indexing). The worker's insert uses `ON CONFLICT DO NOTHING` with no conflict target, so the same statement covers both the node key and the root key.
+
+**Q: The migration adds a NOT NULL column to a table that already has rows. How?**
+Autogenerate wrote it as one `add_column(nullable=False)`, which fails on existing rows. I edited it into three steps: add the column as nullable, backfill it from each row's node with one `UPDATE ... FROM nodes`, then set NOT NULL. The downgrade deletes root rows before making `node_id` NOT NULL again, because they can't exist in the old schema.
+
+**Q: Dedup keys and LangGraph thread ids used the node id. What about the root?**
+`DeepDiveBase.target_key` gives `str(node_id)` for a node and `snapshot-{snapshot_id}` for the root. Node keys kept their old format, so jobs and checkpoints already in flight during a deploy still match.
+
+## Re-indexing (snapshots)
+
+**Q: How does re-indexing work?**
+A repo has many snapshots, one per indexed commit. Each snapshot owns its tree (nodes and edges) and its deep dives, and is never edited. A re-index clones HEAD, builds a new snapshot in one transaction, and moves the repo's `current_snapshot_id` to it. `/map` shows the current snapshot. Old deep dives stay readable and are tagged "older commit".
+
+**Q: Why not update the existing tree in place?**
+Three reasons. Every deep dive whose node changed or vanished would point at wrong paths. The tree would need a cycle check on every edge insert, because it is no longer built once top-down. And a half-finished update is visible to readers unless I lock a lot. A new snapshot avoids all three: readers keep seeing the old tree until the pointer moves, in the same commit that wrote the new one.
+
+**Q: Why a snapshots table and not just a `commit_sha` column on nodes?**
+The column is a smaller migration, but "one tree per (repo, commit)" can't be a unique key across many node rows. With a table, `UNIQUE (repo_id, commit_sha)` is the fence: a redelivered or zombie job hits `ON CONFLICT DO NOTHING` and builds nothing.
+
+**Q: Two re-index jobs run at once. Which one wins?**
+The one that read HEAD later, whatever order they finish in. Each job reads Postgres's `clock_timestamp()` before cloning. The pointer moves only `WHERE head_seen_at IS NULL OR head_seen_at < :mine`, and the same update stores `:mine`. That's a fencing token: without it, a slow job that cloned an older commit could finish last and roll the repo back. The loser's snapshot is kept, just not current.
+
+**Q: Why the database clock and not `datetime.now()` in the worker?**
+Workers can run on different machines with skewed clocks, and a skew of a few seconds could order two jobs wrong. One Postgres gives every worker the same clock. `clock_timestamp()` and not `now()`, because `now()` is the start of the transaction.
+
+**Q: How do you stop the same commit being indexed twice?**
+Three layers. The API reads HEAD with `git ls-remote` and keys the dedup marker on `url:sha`, so the same commit is queued once. If HEAD is already the current commit, the API queues nothing at all. And if a job runs anyway (redelivery), the worker finds the snapshot built after cloning and runs no agents; it only moves the pointer.
+
+**Q: Why does the dedup marker never need freeing?**
+It names a commit, and a commit's snapshot is built once. A new commit gets a new key, which is what lets a re-index through. The old URL-only key would have blocked every re-index forever.
+
+**Q: What happens to a deep dive on a node from an old snapshot?**
+Nothing breaks. The deep dive row points at its snapshot, and the worker clones that snapshot's commit, not the repo's current one. The node's paths were checked against that commit, so they still exist there. The list marks it stale: `deep_dive.snapshot_id != repo.current_snapshot_id`.
+
+**Q: How did the migration move existing data?**
+Autogenerate gave the schema changes; it can't move data. I added the columns as nullable, made one snapshot per indexed repo from its `commit_sha`, pointed the repo, its nodes and its deep dives at it, then set NOT NULL and dropped the old columns. The downgrade keeps each repo's current snapshot and deletes the rest, since the old schema holds one tree per repo. I ran both directions on the test database with seeded rows.
+
+**Q: What's the known gap?**
+If HEAD goes back to a commit that was queued before (a force-push revert), its dedup marker still exists, so nothing is queued and the pointer stays on the newer commit. The client gives up after its poll limit. The fix is to move the pointer in the API when that snapshot already exists. Old snapshots are also never deleted; collecting the ones no deep dive uses is a TODO.

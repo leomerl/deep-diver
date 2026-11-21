@@ -13,17 +13,19 @@ import { useEffect, useMemo, useState } from "react";
 import type { RepoMap, RepoRead } from "./api";
 import { AreaNode } from "./AreaNode";
 import { Breadcrumb } from "./Breadcrumb";
-import { AREA_TYPE, layout, NODE_H, NODE_W, REPO_NODE_ID, REPO_TYPE } from "./layout";
+import { AREA_TYPE, layout, NODE_H, NODE_W, REPO_NODE_ID, REPO_TYPE, type Selection } from "./layout";
 import { repoLabel } from "./repoLabel";
 import { RepoNode } from "./RepoNode";
 import { scopeView } from "./scopeView";
 
-type Props = { repo: RepoRead; map: RepoMap; selectedId: number | null; onSelect: (id: number) => void };
+type Props = { repo: RepoRead; map: RepoMap; selectedId: Selection; onSelect: (id: Selection) => void };
 
 // Module-level so React Flow sees the same object every render (a new one would remount every node).
 const NODE_TYPES = { [AREA_TYPE]: AreaNode, [REPO_TYPE]: RepoNode };
 const FIT = { padding: 0.2, maxZoom: 1 };
 const CAMERA_MS = 400;
+// The canvas darkens one step per level drilled into; styles.css defines steps 0 to MAX_DEPTH_TINT.
+const MAX_DEPTH_TINT = 3;
 
 /** Mount with `key={repo.id}` so the scope resets when the repo changes. */
 export function MapCanvas(props: Props) {
@@ -55,6 +57,7 @@ function Canvas({ repo, map, selectedId, onSelect }: Props) {
     <ReactFlow
       nodes={nodes}
       edges={edges}
+      className={`depth-${Math.min(view.trail.length, MAX_DEPTH_TINT)}`}
       nodeTypes={NODE_TYPES}
       fitView
       fitViewOptions={FIT}
@@ -63,7 +66,7 @@ function Canvas({ repo, map, selectedId, onSelect }: Props) {
       nodesConnectable={false}
       proOptions={{ hideAttribution: true }}
       onNodeClick={(_, node) => {
-        if (node.id === REPO_NODE_ID) return;
+        if (node.id === REPO_NODE_ID) return onSelect(REPO_NODE_ID);
         const id = Number(node.id);
         if (id === scopeId) return setScopeId(parentId);
         onSelect(id);

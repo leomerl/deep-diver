@@ -93,9 +93,31 @@ export interface paths {
         put?: never;
         /**
          * Add Repo
-         * @description Idempotent: a repo that was already added is accepted again and not re-queued.
+         * @description Idempotent per commit: a repo already queued at its HEAD isn't queued again. One indexed at an older commit
+         *     is re-indexed.
          */
         post: operations["add_repo_repos_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/repos/{repo_id}/reindex": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reindex Repo
+         * @description Queue a snapshot of the repo's current HEAD; old snapshots and their deep dives stay. Answers with the commit
+         *     the job will index; when that is already the current commit, nothing is queued.
+         */
+        post: operations["reindex_repo_repos__repo_id__reindex_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -111,7 +133,7 @@ export interface paths {
         };
         /**
          * Get Map
-         * @description Every area of the repo and the edges between them; the client draws the tree from the `contains` edges.
+         * @description The current snapshot's areas and the edges between them; the client draws the tree from the `contains` edges.
          */
         get: operations["get_map_repos__repo_id__map_get"];
         put?: never;
@@ -180,22 +202,185 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/repos/{repo_id}/deep-dive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Repo Deep Dive
+         * @description The current snapshot's; 404 until it is written. Older snapshots' pages are under /deep-dives/{id}/html.
+         */
+        get: operations["get_repo_deep_dive_repos__repo_id__deep_dive_get"];
+        put?: never;
+        /**
+         * Request Repo Deep Dive
+         * @description The deep dive about the whole repo at its current snapshot. Idempotent, like the node one.
+         */
+        post: operations["request_repo_deep_dive_repos__repo_id__deep_dive_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/repos/{repo_id}/deep-dive/html": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Repo Deep Dive Html */
+        get: operations["get_repo_deep_dive_html_repos__repo_id__deep_dive_html_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/deep-dives": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Deep Dives
+         * @description Every written deep dive, newest first, older snapshots' included.
+         */
+        get: operations["list_deep_dives_deep_dives_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/deep-dives/{deep_dive_id}/html": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Deep Dive Page
+         * @description Any page by its own id. The node and repo routes only reach the current snapshot's root page.
+         */
+        get: operations["get_deep_dive_page_deep_dives__deep_dive_id__html_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/interview-questions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Interview Questions
+         * @description The whole self-quiz bank; the client filters by repo and shuffles.
+         */
+        get: operations["list_interview_questions_interview_questions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Settings */
+        get: operations["get_settings_settings_get"];
+        /**
+         * Put Settings
+         * @description Workers read the setting when each agent starts, so the change applies to the next agent, not the next restart.
+         */
+        put: operations["put_settings_settings_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /**
+         * AgentRuntime
+         * @enum {string}
+         */
+        AgentRuntime: "gateway" | "agent_sdk";
+        /**
+         * AppSettings
+         * @description The dashboard's settings: one shape for the GET response and the PUT body, so they can't drift.
+         */
+        AppSettings: {
+            agent_runtime: components["schemas"]["AgentRuntime"];
+        };
+        /**
          * DeepDiveCreate
          * @description The deep dive job payload; the worker re-validates it with the same class.
          */
         DeepDiveCreate: {
+            /** Snapshot Id */
+            snapshot_id: number;
             /** Node Id */
-            node_id: number;
+            node_id?: number | null;
+        };
+        /**
+         * DeepDiveListItem
+         * @description GET /deep-dives item: the deep dive plus the labels the list shows and groups by.
+         */
+        DeepDiveListItem: {
+            /** Snapshot Id */
+            snapshot_id: number;
+            /** Node Id */
+            node_id?: number | null;
+            /** Id */
+            id: number;
+            /** Object Key */
+            object_key: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Node Name */
+            node_name: string | null;
+            /** Repo Url */
+            repo_url: string;
+            /** Stale */
+            stale: boolean;
         };
         /** DeepDiveRead */
         DeepDiveRead: {
+            /** Snapshot Id */
+            snapshot_id: number;
             /** Node Id */
-            node_id: number;
+            node_id?: number | null;
             /** Id */
             id: number;
             /** Object Key */
@@ -242,6 +427,28 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /**
+         * InterviewQuestionListItem
+         * @description GET /interview-questions item: the question plus the area it is about, for the practice page.
+         */
+        InterviewQuestionListItem: {
+            /** Question */
+            question: string;
+            /** Answer */
+            answer: string;
+            /** Id */
+            id: number;
+            /** Deep Dive Id */
+            deep_dive_id: number;
+            /** Repo Id */
+            repo_id: number;
+            /** Node Id */
+            node_id: number | null;
+            /** Node Name */
+            node_name: string | null;
+            /** Repo Url */
+            repo_url: string;
         };
         /** NodeRead */
         NodeRead: {
@@ -314,6 +521,13 @@ export interface components {
          * @enum {string}
          */
         RepoStatus: "indexing" | "indexed" | "failed";
+        /** SnapshotBase */
+        SnapshotBase: {
+            /** Repo Id */
+            repo_id: number;
+            /** Commit Sha */
+            commit_sha: string;
+        };
         /** UserRead */
         UserRead: {
             /** Github Id */
@@ -514,6 +728,39 @@ export interface operations {
             };
         };
     };
+    reindex_repo_repos__repo_id__reindex_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                repo_id: number;
+            };
+            cookie?: {
+                session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SnapshotBase"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_map_repos__repo_id__map_get: {
         parameters: {
             query?: never;
@@ -656,6 +903,223 @@ export interface operations {
                 };
                 content: {
                     "text/html": string;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_repo_deep_dive_repos__repo_id__deep_dive_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                repo_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeepDiveRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    request_repo_deep_dive_repos__repo_id__deep_dive_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                repo_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeepDiveCreate"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_repo_deep_dive_html_repos__repo_id__deep_dive_html_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                repo_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_deep_dives_deep_dives_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeepDiveListItem"][];
+                };
+            };
+        };
+    };
+    get_deep_dive_page_deep_dives__deep_dive_id__html_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                deep_dive_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_interview_questions_interview_questions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterviewQuestionListItem"][];
+                };
+            };
+        };
+    };
+    get_settings_settings_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppSettings"];
+                };
+            };
+        };
+    };
+    put_settings_settings_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AppSettings"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppSettings"];
                 };
             };
             /** @description Validation Error */

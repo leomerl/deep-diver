@@ -7,7 +7,7 @@ import { repoLabel } from "./repoLabel";
 function RepoNodeView({ data }: NodeProps<RepoNodeType>) {
   const { name, host } = repoLabel(data.repo.url);
   return (
-    <div className="area-card repo-card">
+    <div className={data.selected ? "area-card repo-card area-card--selected" : "area-card repo-card"}>
       <div className="area-card__title">
         <span className="area-card__name">{name}</span>
       </div>

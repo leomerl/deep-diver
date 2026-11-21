@@ -10,6 +10,10 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 # so an idle read timed out and crashed the worker.
 REDIS_SOCKET_TIMEOUT_S = float(os.getenv("REDIS_SOCKET_TIMEOUT_S", "15"))
 LLM_MODEL = os.getenv("LLM_MODEL", "claude-opus-5-5")
+# The agent runtimes this process may run (app.agent.AgentRuntime names, comma-separated; parsed by make_runner).
+# The dashboard setting picks one of them per agent. agent_sdk needs the Claude Code login of a developer's host, so
+# compose keeps the default and its workers fall back to the gateway whatever the dashboard says.
+AGENT_RUNTIMES = os.getenv("AGENT_RUNTIMES", "gateway")
 # The deep dive fact-checker; separate so a cheaper writer can be paired with a stronger verifier.
 DEEP_DIVE_VERIFIER_MODEL = os.getenv("DEEP_DIVE_VERIFIER_MODEL", LLM_MODEL)
 # Off by default: in review it added ~1 point (83 -> 84) for ~$0.40 more per deep dive.

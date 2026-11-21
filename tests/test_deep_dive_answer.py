@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from app.deep_dive.answer import MAX_EXCERPT_LINES, MAX_SVG_BYTES, AnswerContext, DeepDiveAnswer, Diagram, SvgFigure
+from app.deep_dive.answer import MAX_CALLOUTS, MAX_EXCERPT_LINES, MAX_PROSE_WORDS, MAX_SECTIONS, MAX_SVG_BYTES, AnswerContext, DeepDiveAnswer, Diagram, SvgFigure
 from app.kroki import DiagramLanguage, DiagramSyntaxError
 from app.workspace import Workspace
 
@@ -196,3 +196,27 @@ def test_summary_heading_is_allowed_only_on_the_last_section(workspace: AnswerCo
         _validate(answer, workspace)
     answer["sections"] = [{**body, "heading": "How the queue hands out jobs"}, {**body, "heading": "Summary"}]
     _validate(answer, workspace)
+
+
+CALLOUT = {"type": "callout", "kind": "tip", "text": "Start with the dedup key."}  # same as the one in _answer
+
+
+def test_too_many_words_and_callouts_are_reported_together(workspace: AnswerContext) -> None:
+    answer = _answer(" ".join(["word"] * MAX_PROSE_WORDS))  # plus the callout's words: just over the budget
+    answer["sections"][0]["blocks"] += [CALLOUT] * MAX_CALLOUTS  # type: ignore[index]  # test fixture is a plain dict
+    with pytest.raises(ValidationError, match=r"too long: \d+ words.*callouts"):
+        _validate(answer, workspace)
+
+
+def test_a_page_at_the_budget_passes(workspace: AnswerContext) -> None:
+    callout_words = len(str(CALLOUT["text"]).split())
+    _validate(_answer(" ".join(["word"] * (MAX_PROSE_WORDS - callout_words))), workspace)
+
+
+def test_more_sections_than_the_cap_are_rejected(workspace: AnswerContext) -> None:
+    answer = _answer()
+    answer["sections"] = [_section("How a job moves", _diagram())] + [
+        _section(f"Why the queue does thing {n}") for n in range(MAX_SECTIONS)
+    ]
+    with pytest.raises(ValidationError, match=f"at most {MAX_SECTIONS}"):
+        _validate(answer, workspace)

@@ -1,9 +1,7 @@
 import logging
 from pathlib import Path
 
-from langchain_core.language_models import BaseChatModel
-
-from app.agent import run_agent
+from app.agent import AgentRunner
 from app.workspace import Workspace, make_workspace_tools
 
 from .answer import AnswerContext, DeepDiveAnswer, RenderDiagram, VerifiedAnswer
@@ -22,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 def verify_deep_dive(
-    model: BaseChatModel,
+    run: AgentRunner,
     settings: DeepDiveSettings,
     slot: Slot,
     render_diagram: RenderDiagram,
@@ -38,8 +36,8 @@ def verify_deep_dive(
     """
     graph = import_graph(workspace.root, settings.import_graph_timeout_s)
     with slot():
-        verified = run_agent(
-            model, SYSTEM_PROMPT, TASK_PROMPT.format(repo_task=task, answer=answer.model_dump_json(indent=1)),
+        verified = run(
+            SYSTEM_PROMPT, TASK_PROMPT.format(repo_task=task, answer=answer.model_dump_json(indent=1)),
             make_workspace_tools(workspace, graph), VerifiedAnswer, settings.max_turns, settings.wrap_up_turns,
             label + LABEL_SUFFIX, context=AnswerContext(workspace, render_diagram),
         )

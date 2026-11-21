@@ -27,14 +27,10 @@ HtmlReaderDep = Annotated[Callable[[str], str], Depends(get_html_reader)]
 @router.post("/{node_id}/deep-dive", status_code=status.HTTP_202_ACCEPTED)
 def request_deep_dive(node_id: int, session: SessionDep) -> DeepDiveCreate:
     """Idempotent: a node that was already requested is accepted again and not re-queued."""
-    if session.get(Node, node_id) is None:
+    node = session.get(Node, node_id)
+    if node is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "node not found")
-    job = DeepDiveCreate(node_id=node_id)
-    try:
-        enqueue_deep_dive_job(job)
-    except RedisError as e:
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "queue unavailable, retry") from e
-    return job
+    return enqueue_or_503(DeepDiveCreate(snapshot_id=node.snapshot_id, node_id=node_id))
 
 
 @router.get("/{node_id}/deep-dive")
@@ -45,10 +41,21 @@ def get_deep_dive(node_id: int, session: SessionDep) -> DeepDiveRead:
 
 @router.get("/{node_id}/deep-dive/html", response_class=HTMLResponse)
 def get_deep_dive_html(node_id: int, session: SessionDep, read: HtmlReaderDep) -> HTMLResponse:
+    return html_response(_deep_dive(session, node_id), read)
+
+
+def enqueue_or_503(job: DeepDiveCreate) -> DeepDiveCreate:
+    try:
+        enqueue_deep_dive_job(job)
+    except RedisError as e:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "queue unavailable, retry") from e
+    return job
+
+
+def html_response(row: DeepDive, read: Callable[[str], str]) -> HTMLResponse:
     # Proxied, so the bucket stays private.
     # TODO [API:LOW] at scale, redirect to a presigned URL so page bytes skip the API.
-    html = read(_deep_dive(session, node_id).object_key)
-    return HTMLResponse(html, headers={"Content-Security-Policy": HTML_CSP})
+    return HTMLResponse(read(row.object_key), headers={"Content-Security-Policy": HTML_CSP})
 
 
 def _deep_dive(session: SessionDep, node_id: int) -> DeepDive:

@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from app.deep_dive.answer import AnswerContext, DeepDiveAnswer
-from app.deep_dive.render_html import reading_minutes, render_html
+from app.deep_dive.render_html import highlight_lines, reading_minutes, render_html
 from app.workspace import Workspace
 
 SVG = '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>'
@@ -61,12 +61,25 @@ def test_model_text_is_escaped_and_backticks_become_code(workspace: Workspace) -
     assert "<h2>How <code>enqueue</code> works</h2>" in html
 
 
-def test_excerpt_copies_real_lines_escaped_with_line_numbers(workspace: Workspace) -> None:
+def test_excerpt_copies_real_lines_highlighted_and_escaped_with_line_numbers(workspace: Workspace) -> None:
     html = _render(workspace, "Text.")
 
-    assert '<span class="ln">2</span>if a &lt; b:' in html
-    assert '<span class="ln">3</span>    enqueue()' in html
-    assert "import redis" not in html
+    assert '<span class="ln">2</span><span class="k">if</span>' in html
+    assert '<span class="o">&lt;</span>' in html
+    assert '<span class="ln">3</span>' in html and "enqueue" in html
+    assert "redis" not in html
+
+
+def test_highlighting_keeps_line_numbers_and_closes_spans_per_line() -> None:
+    lines = highlight_lines('\n\n"""one\ntwo"""\nx = 1\n', "a.py")
+
+    assert lines[2].startswith("<span") and lines[2].endswith("</span>")  # docstring split cleanly across lines
+    assert "two" in lines[3]
+    assert "x" in lines[4]
+
+
+def test_unknown_file_type_is_escaped_plain_text() -> None:
+    assert highlight_lines("a <b>", "notes.unknownext")[0] == "a &lt;b&gt;"
 
 
 def test_diagram_is_an_image_with_the_caption_as_alt_text(workspace: Workspace) -> None:
@@ -87,7 +100,9 @@ def test_hand_drawn_svg_figure_renders_like_a_diagram(workspace: Workspace) -> N
 
 
 def test_callout_carries_its_kind(workspace: Workspace) -> None:
-    assert '<aside class="callout warning">' in _render(workspace, "Text.")
+    html = _render(workspace, "Text.")
+    assert '<aside class="callout warning">' in html
+    assert '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">' in html  # decorative; the label says "Watch out"
 
 
 def test_tech_stack_renders_only_when_present(workspace: Workspace) -> None:
@@ -110,5 +125,5 @@ def test_interview_questions_render_as_closed_details_one_paragraph_per_block(wo
 
 def test_reading_time_counts_prose_words(workspace: Workspace) -> None:
     assert reading_minutes(_answer(workspace, "word " * 10)) == 1
-    assert reading_minutes(_answer(workspace, "word " * 1000)) == 6
-    assert "6 min read" in _render(workspace, "word " * 1000)
+    assert reading_minutes(_answer(workspace, "word " * 850)) == 5  # within MAX_PROSE_WORDS
+    assert "5 min read" in _render(workspace, "word " * 850)

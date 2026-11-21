@@ -5,7 +5,7 @@ from .callout import Callout
 from .callout_kind import CalloutKind
 from .code_excerpt import MAX_EXCERPT_LINES, CodeExcerpt
 from .correction import Correction
-from .deep_dive_answer import DeepDiveAnswer
+from .deep_dive_answer import MAX_CALLOUTS, MAX_PROSE_WORDS, MAX_SECTIONS, MAX_TECH, DeepDiveAnswer
 from .diagram import Diagram
 from .interview_question_draft import InterviewQuestionDraft
 from .paragraph import Paragraph
@@ -16,7 +16,7 @@ from .tech_choice import TechChoice
 from .verified_answer import VerifiedAnswer
 
 __all__ = [
-    "MAX_EXCERPT_LINES", "MAX_SVG_BYTES", "Alternative", "AnswerContext", "Block", "Callout", "CalloutKind",
+    "MAX_CALLOUTS", "MAX_EXCERPT_LINES", "MAX_PROSE_WORDS", "MAX_SECTIONS", "MAX_SVG_BYTES", "MAX_TECH", "Alternative", "AnswerContext", "Block", "Callout", "CalloutKind",
     "CodeExcerpt", "Correction", "DeepDiveAnswer", "Diagram", "InterviewQuestionDraft", "Paragraph", "Prose", "RenderDiagram",
     "Section", "SvgFigure", "TechChoice", "VerifiedAnswer", "check_prose",
 ]

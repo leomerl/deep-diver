@@ -12,7 +12,8 @@ config = context.config
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # Default True silences every logger created before this runs: in tests, the app's own (the suite migrates first).
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 # Migrations are derived from the SQLModel tables in app/models.py.
 from sqlmodel import SQLModel

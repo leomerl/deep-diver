@@ -33,7 +33,7 @@ def test_shallow_clone_returns_head_sha_and_temp_dir_is_removed(source_repo: Pat
 
 
 def test_ls_remote_accepts_a_readable_repo_and_rejects_a_missing_one(source_repo: Path, tmp_path: Path) -> None:
-    ls_remote(source_repo.as_uri(), TIMEOUT_S)
+    assert ls_remote(source_repo.as_uri(), TIMEOUT_S) == run_git(["rev-parse", "HEAD"], TIMEOUT_S, cwd=source_repo)
     with pytest.raises(subprocess.CalledProcessError):
         ls_remote((tmp_path / "missing").as_uri(), TIMEOUT_S)
 

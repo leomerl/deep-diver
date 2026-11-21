@@ -17,7 +17,7 @@ ANSWER = {
         {"type": "diagram", "language": "graphviz", "source": "digraph { a -> b }", "caption": "Who calls whom."},
     ]}],
 }
-NODE = 107
+NODE = "107"
 
 
 class Fakes:

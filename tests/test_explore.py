@@ -1,5 +1,6 @@
 import threading
 from contextlib import nullcontext
+from functools import partial
 from pathlib import Path
 from typing import Any, Self
 
@@ -7,6 +8,7 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 
+from app.agent import run_agent
 from app.indexing.explore import explore_repo
 from app.indexing.explore_settings import ExploreSettings
 from app.models import Grouping, TreeNode
@@ -56,7 +58,7 @@ def test_top_agent_then_one_agent_per_area_with_per_node_fallback(tmp_path: Path
         "app/billing": [_submit("b1", ("Pay", "app/payments")), _submit("b2", ("Pay", "app/payments"))],
     })
 
-    tree = explore_repo(model, tmp_path, FILES, "shop", SETTINGS, nullcontext)
+    tree = explore_repo(partial(run_agent, model), tmp_path, FILES, "shop", SETTINGS, nullcontext)
 
     assert _shape(tree) == [("App", ["app"], Grouping.llm, [
         ("Auth", ["app/auth"], Grouping.llm, []),
@@ -71,6 +73,6 @@ def test_top_agent_then_one_agent_per_area_with_per_node_fallback(tmp_path: Path
 def test_single_file_areas_are_not_split(tmp_path: Path) -> None:
     model = ByScopeModel(script={"the whole repository": [_submit("t1", ("Readme", "README.md"))]})
 
-    assert _shape(explore_repo(model, tmp_path, FILES, "shop", SETTINGS, nullcontext)) == [
+    assert _shape(explore_repo(partial(run_agent, model), tmp_path, FILES, "shop", SETTINGS, nullcontext)) == [
         ("Readme", ["README.md"], Grouping.llm, []),
     ]

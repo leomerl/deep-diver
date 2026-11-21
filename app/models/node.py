@@ -22,7 +22,7 @@ class Node(NodeBase, table=True):
     __table_args__ = (sa.CheckConstraint("cardinality(paths) > 0", name="ck_nodes_has_paths"),)
 
     id: int | None = Field(default=None, primary_key=True)
-    repo_id: int = Field(foreign_key="repos.id", ondelete="CASCADE", index=True)  # GET /repos/{id}/map
+    snapshot_id: int = Field(foreign_key="snapshots.id", ondelete="CASCADE", index=True)  # GET /repos/{id}/map
 
 
 class NodeRead(NodeBase):

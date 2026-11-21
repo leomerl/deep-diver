@@ -3,8 +3,10 @@
   color-scheme: light dark;
   --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
   --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  --sidebar-w: 320px;
-  --panel-w: 560px;
+  --sidebar-w: 280px;
+  --sidebar-rail: 52px;
+  /* The panel shrinks with the window so the map keeps room on a laptop screen. */
+  --panel-w: clamp(380px, 40vw, 560px);
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -29,7 +31,15 @@
   --accent-text: #0062cc;
   --accent-tint: rgba(0, 122, 255, 0.12);
   --accent-ring: rgba(0, 122, 255, 0.3);
+  /* Button fill is darker than --accent: white on #007aff is 4.0:1, on #0062cc 5.8:1 (13px text needs 4.5:1). */
+  --btn-bg: #0062cc;
+  --btn-bg-hover: #0058b8;
+  --btn-bg-pressed: #004ea3;
   --danger: #d70015;
+  /* Map background per level drilled into: the signature "dive". */
+  --depth-1: #f0f2f6;
+  --depth-2: #e5e9f0;
+  --depth-3: #d9dfe9;
   --dots: rgba(0, 0, 0, 0.12);
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 2px 8px rgba(0, 0, 0, 0.06);
   --shadow-raised: 0 2px 4px rgba(0, 0, 0, 0.08), 0 6px 16px rgba(0, 0, 0, 0.1);
@@ -54,9 +64,28 @@
     --accent-tint: rgba(10, 132, 255, 0.22);
     --accent-ring: rgba(10, 132, 255, 0.45);
     --danger: #ff6961;
+    --depth-1: #14171c;
+    --depth-2: #10141a;
+    --depth-3: #0b1018;
     --dots: rgba(255, 255, 255, 0.12);
     --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.4);
     --shadow-raised: 0 2px 4px rgba(0, 0, 0, 0.5), 0 6px 16px rgba(0, 0, 0, 0.5);
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --hairline: rgba(0, 0, 0, 0.4);
+    --text-secondary: #3a3a3c;
+    --text-tertiary: #48484a;
+  }
+}
+
+@media (prefers-contrast: more) and (prefers-color-scheme: dark) {
+  :root {
+    --hairline: rgba(255, 255, 255, 0.45);
+    --text-secondary: #d1d1d6;
+    --text-tertiary: #c7c7cc;
   }
 }
 
@@ -100,6 +129,14 @@ input {
   grid-template-columns: var(--sidebar-w) minmax(0, 1fr) var(--panel-w);
 }
 
+.app--sidebar-hidden {
+  --sidebar-w: var(--sidebar-rail);
+}
+
+.app--sidebar-hidden .sidebar {
+  padding-inline: var(--space-2);
+}
+
 .sidebar {
   padding: var(--space-4) var(--space-3);
   overflow: auto;
@@ -107,8 +144,15 @@ input {
   border-right: 1px solid var(--hairline);
 }
 
+.sidebar__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-4);
+}
+
 .sidebar__title {
-  margin: 0 var(--space-2) var(--space-4);
+  margin: 0 var(--space-2);
   font-size: 15px;
   font-weight: 700;
   letter-spacing: -0.01em;
@@ -120,7 +164,35 @@ input {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--text-tertiary);
+  /* --text-tertiary is 3.3:1 on the sidebar grey; secondary is 4.7:1. */
+  color: var(--text-secondary);
+}
+
+.sidebar__add {
+  margin-top: var(--space-2);
+  width: 100%;
+}
+
+.icon-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.icon-btn:hover {
+  color: var(--text);
+  background: var(--hover);
+}
+
+.icon-btn:active {
+  background: var(--pressed);
 }
 
 .canvas {
@@ -153,7 +225,8 @@ input {
   padding: 0 var(--space-4);
   font-weight: 500;
   color: #fff;
-  background: var(--accent);
+  text-decoration: none;
+  background: var(--btn-bg);
   border: 0;
   border-radius: var(--radius-sm);
   cursor: pointer;
@@ -161,11 +234,109 @@ input {
 }
 
 .btn:hover {
-  background: var(--accent-hover);
+  background: var(--btn-bg-hover);
 }
 
 .btn:active {
-  background: var(--accent-pressed);
+  background: var(--btn-bg-pressed);
+}
+
+/* Everything but the screen's one main action: grey fill, text color. */
+.btn--secondary {
+  color: var(--text);
+  background: var(--bg-inset);
+  box-shadow: inset 0 0 0 1px var(--hairline);
+}
+
+.btn--secondary:hover {
+  background: var(--hover);
+}
+
+.btn--secondary:active {
+  background: var(--pressed);
+}
+
+/* Add Repository sheet */
+.sheet {
+  width: min(520px, calc(100vw - 32px));
+  max-height: min(640px, calc(100vh - 64px));
+  padding: 0;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  box-shadow: var(--shadow-raised);
+}
+
+.sheet[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+.sheet::backdrop {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.sheet__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.sheet__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.sheet__body {
+  overflow: auto;
+  padding: 0 var(--space-4) var(--space-4);
+}
+
+.search-field {
+  width: 100%;
+  height: 28px;
+  margin-bottom: var(--space-2);
+  padding: 0 var(--space-2);
+  background: var(--bg-inset);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+}
+
+.search-field::placeholder {
+  color: var(--text-tertiary);
+}
+
+.search-field:focus-visible {
+  outline-offset: 0;
+}
+
+/* Indeterminate progress beside a status note */
+.spinner {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  margin-right: var(--space-2);
+  vertical-align: -1px;
+  border: 1.5px solid var(--hairline);
+  border-top-color: var(--text-secondary);
+  border-radius: 50%;
+  animation: spin 800ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
 }
 
 .btn:disabled {
@@ -267,6 +438,23 @@ input {
   --xy-edge-stroke-width-default: 1.5;
 }
 
+.canvas .react-flow.depth-1 {
+  --bg-canvas: var(--depth-1);
+}
+
+.canvas .react-flow.depth-2 {
+  --bg-canvas: var(--depth-2);
+}
+
+.canvas .react-flow.depth-3 {
+  --bg-canvas: var(--depth-3);
+}
+
+.canvas .react-flow,
+.canvas .react-flow__background {
+  transition: background-color 420ms ease;
+}
+
 .canvas .react-flow__handle {
   visibility: hidden;
 }
@@ -300,7 +488,9 @@ input {
 @media (prefers-reduced-motion: reduce) {
   .canvas .react-flow__node,
   .canvas .react-flow__node .area-card,
-  .canvas .react-flow__edge {
+  .canvas .react-flow__edge,
+  .canvas .react-flow,
+  .canvas .react-flow__background {
     transition: none;
     animation: none;
   }
@@ -316,6 +506,14 @@ input {
   border: 1px solid var(--hairline);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
+}
+
+.crumbs__depth {
+  padding: 2px var(--space-2) 2px var(--space-1);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  border-right: 1px solid var(--hairline);
 }
 
 .crumbs__item {
@@ -453,10 +651,6 @@ input {
   background: var(--bg-sidebar);
 }
 
-.repo-card {
-  cursor: default;
-}
-
 .repo-card .area-card__name,
 .area-card--scope .area-card__name {
   color: var(--accent-text);
@@ -502,9 +696,14 @@ input {
   background: var(--accent-tint);
 }
 
-.badge--folder {
+.badge--folder,
+.badge--stale {
   color: var(--text-secondary);
   background: var(--bg-inset);
+}
+
+.source-list__name .badge {
+  margin-left: var(--space-2);
 }
 
 .node-panel__body {
@@ -532,6 +731,10 @@ input {
   word-break: break-all;
 }
 
+.node-panel__fullscreen {
+  margin-left: auto;
+}
+
 .node-panel__frame {
   flex: 1;
   border: 0;
@@ -543,4 +746,91 @@ input {
   place-items: center;
   height: 100%;
   margin: 0;
+}
+
+/* Deep dives and practice pages */
+.page {
+  overflow: auto;
+  padding: var(--space-6);
+  background: var(--bg-canvas);
+}
+
+.page__inner {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.practice__toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.practice__filter {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.practice__count {
+  margin: 0;
+}
+
+.practice__toolbar .btn {
+  margin-left: auto;
+}
+
+.practice__card {
+  padding: var(--space-6);
+  background: var(--bg);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.practice__area {
+  margin: 0 0 var(--space-2);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.practice__area a {
+  color: var(--accent-text);
+}
+
+.practice__question {
+  margin: 0 0 var(--space-4);
+  font-size: 18px;
+  line-height: 1.4;
+}
+
+.practice__answer {
+  margin: 0;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.practice__actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-6);
+}
+
+.settings__group {
+  display: grid;
+  gap: 12px;
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.settings__option {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  cursor: pointer;
+}
+
+.reindex {
+  margin-top: var(--space-3);
 }

@@ -9,15 +9,7 @@ from langchain_core.tools import BaseTool
 from pydantic import BaseModel, ValidationError
 
 from .agent_failed import AgentFailed
-
-MAX_ANSWER_ATTEMPTS = 2  # the first answer plus one retry with the validation error fed back
-NUDGE = "Keep exploring with the tools if you need to, then give your final answer by calling {answer}."
-REJECTED = "Answer rejected. Fix these problems and call {answer} again:\n{errors}"
-
-WRAP_UP = (
-    "You have used your exploration budget. You have {turns} more turns: stop exploring and call {answer} "
-    "with your best answer now."
-)
+from .nudges import MAX_ANSWER_ATTEMPTS, NUDGE, REJECTED, WRAP_UP
 
 logger = logging.getLogger(__name__)
 

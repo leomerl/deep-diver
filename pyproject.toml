@@ -19,6 +19,7 @@ dependencies = [
     "minio>=7.2.20",
     "networkx>=3.7",
     "psycopg[binary]>=3.2",
+    "pygments>=2.21.0",
     "redis>=5.0",
     "sqlmodel>=0.0.50",
     "uvicorn>=0.54.0",

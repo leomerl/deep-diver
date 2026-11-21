@@ -12,9 +12,12 @@ BANNED = re.compile(r"\b(" + "|".join(map(re.escape, (*BANNED_WORDS, *BANNED_PHR
 def check_prose(text: str) -> str:
     """Reject text with humanizer tells, listing every hit at once so one retry can fix them all."""
     prose = INLINE_CODE.sub("", text)
-    hits = [*(repr(dash) for dash in BANNED_DASHES if dash in prose), *(m.group(0) for m in BANNED.finditer(prose))]
+    dashes = [repr(dash) for dash in BANNED_DASHES if dash in prose]
+    hits = [*dashes, *(m.group(0) for m in BANNED.finditer(prose))]
     if hits:
-        raise ValueError(f"remove AI-writing tells: {', '.join(hits)}. Use a period, comma or colon instead of a dash")
+        # The dash hint only when a dash was found: a wrong hint sends the one retry hunting for a dash that isn't there.
+        hint = ". Use a period, comma or colon instead of a dash" if dashes else ""
+        raise ValueError(f"remove AI-writing tells: {', '.join(hits)}{hint}")
     return text
 
 

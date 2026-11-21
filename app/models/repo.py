@@ -35,7 +35,13 @@ class Repo(RepoBase, table=True):
     __tablename__ = "repos"
 
     id: int | None = Field(default=None, primary_key=True)
-    commit_sha: str | None = Field(default=None, max_length=40)  # pinned at index time
+    # The snapshot /map shows. use_alter: repos and snapshots point at each other, so this FK is added after both exist.
+    current_snapshot_id: int | None = Field(
+        default=None, sa_column_args=[sa.ForeignKey("snapshots.id", ondelete="SET NULL", use_alter=True)]
+    )
+    # Fence for moving current_snapshot_id: the DB time at which the job that last moved it read HEAD. A slow job
+    # that read an older HEAD can't move the pointer back. The only column a worker overwrites.
+    head_seen_at: datetime | None = Field(default=None, sa_type=sa.DateTime(timezone=True))
     # native_enum=False: stored as VARCHAR, so adding a status later needs no ALTER TYPE
     # index serves GET /repos (indexed only)
     status: RepoStatus = Field(
@@ -51,7 +57,7 @@ class Repo(RepoBase, table=True):
 
 class RepoRead(RepoBase):
     id: int
-    commit_sha: str | None
+    commit_sha: str | None  # the current snapshot's commit
     status: RepoStatus
     added_by: int | None
     created_at: datetime

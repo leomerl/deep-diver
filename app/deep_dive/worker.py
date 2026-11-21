@@ -45,7 +45,7 @@ def main() -> None:
                 sparse_clone(url, sha, paths, dest, CLONE_TIMEOUT_S, env=git_env(session, url, added_by))
 
             generate_deep_dive(session, job, clone, ls, write, store, forget)
-        logger.info("deep dive done for node %s", job.node_id)
+        logger.info("deep dive done for %s", job.target_key)
 
     stop = threading.Event()
     for sig in (signal.SIGTERM, signal.SIGINT):

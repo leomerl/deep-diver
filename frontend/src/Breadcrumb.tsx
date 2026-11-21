@@ -10,6 +10,7 @@ export function Breadcrumb({ repoName, trail, onNavigate }: Props) {
   return (
     <Panel position="top-left">
       <nav className="crumbs" aria-label="Area scope">
+        <span className="crumbs__depth">Depth {trail.length}</span>
         {crumbs.map((c, i) => (
           <span key={c.id ?? REPO_CRUMB_KEY} className="crumbs__item">
             {i > 0 && <span className="crumbs__sep">›</span>}

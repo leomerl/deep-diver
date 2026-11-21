@@ -10,8 +10,8 @@ BANNED_DASHES = ("—", "–", " -- ")
 BANNED_WORDS = (
     "actually", "additionally", "bolstered", "crucial", "delve", "enduring", "enhance", "garner", "interplay",
     "intricate", "intricacies", "landscape", "meticulous", "meticulously", "pivotal", "quietly", "showcase",
-    "tapestry", "testament", "underscore", "underscores", "valuable", "vibrant", "deep dive",
-)
+    "tapestry", "testament", "underscore", "underscores", "valuable", "vibrant",
+)  # not "deep dive": it is this product's name, so every page has to say it
 
 BANNED_PHRASES = (
     # staged run-ups

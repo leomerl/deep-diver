@@ -2,7 +2,7 @@
 
 Maps repos into a tree of code areas and generates AI deep dives on any node. [DESIGN.md](DESIGN.md) holds the requirements, architecture and decisions; read it before proposing anything.
 
-Stack: Python 3.12, uv, SQLModel + Alembic, Postgres, Redis Streams, FastAPI and LangGraph later. Frontend in `frontend/`: React + TypeScript + Vite + React Flow; API types generated from OpenAPI (`npm run types`), never hand-written. Local services: `docker compose up -d`.
+Stack: Python 3.12, uv, SQLModel + Alembic, Postgres, Redis Streams, FastAPI and LangGraph later. Frontend in `frontend/`: React + TypeScript + Vite + React Flow; API types generated from OpenAPI (`npm run types`), never hand-written. Everything runs in compose: `docker compose up -d --build` (app at http://localhost:8000; `migrate` applies migrations on start).
 
 ## How we work
 

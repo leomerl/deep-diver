@@ -71,7 +71,7 @@ export function RepoList({ selected, onSelect, pendingUrl, onIndexed }: Props) {
           );
         })}
       </ul>
-      {pendingUrl && !gaveUp && <p className="note">Indexing {pendingUrl}…</p>}
+      {pendingUrl && !gaveUp && <p className="note" role="status"><span className="spinner" aria-hidden="true" />Indexing {pendingUrl}…</p>}
       {pendingUrl && gaveUp && (
         <p role="alert" className="note note--error">
           {pendingUrl} is still not indexed after 15 minutes; the job may have failed. Add it again to retry.

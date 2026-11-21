@@ -3,6 +3,7 @@ import threading
 from collections.abc import Callable
 
 from redis import Redis
+from redis.exceptions import RedisError
 
 from .consumer import ack, read_one
 from .dead_letter import dead_letter
@@ -12,6 +13,7 @@ from .work_loop_settings import WorkLoopSettings
 
 FIRST_DELIVERY = 1
 MS_PER_S = 1000
+REDIS_RETRY_S = 5.0
 
 type Handle = Callable[[dict[str, str]], None]  # job fields -> done; raising leaves the job pending for a retry
 
@@ -26,7 +28,14 @@ def work_loop(client: Redis, settings: WorkLoopSettings, consumer: str, handle: 
     """
     s = settings
     while not stop.is_set():
-        entry = _next(client, s, consumer)
+        try:
+            entry = _next(client, s, consumer)
+        except RedisError:
+            # Seen on the host: the socket to Dockerized Redis drops while Redis is healthy. No job is leased yet,
+            # so nothing is lost; dying here only costs a restart. redis-py reconnects on the next command.
+            logger.warning("redis unreachable, retrying in %.0fs", REDIS_RETRY_S, exc_info=True)
+            stop.wait(REDIS_RETRY_S)
+            continue
         if entry is None:
             continue
         entry_id, fields, deliveries = entry

@@ -46,7 +46,7 @@ Files: `app/models/*`, `app/config.py`, `migrations/`, `alembic.ini`
 | `status` stored as VARCHAR (`native_enum=False`) | adding a status needs no `ALTER TYPE` | **no database-level CHECK**: only Pydantic guards values |
 | `paths TEXT[]` on nodes (prefixes, overlap allowed) | read with the node; feeds the sparse clone directly | "who covers file X?" needs a GIN index later |
 | Tree as `contains` edges (no `parent_id`) | one relationship table; `/map` is `{nodes, edges}` | children = a join, top level = an anti-join; whole-subtree reads need a recursive CTE |
-| `repo_id` index | serves `GET /repos/{id}/map` | slightly slower node inserts |
+| `snapshot_id` index | serves `GET /repos/{id}/map` | slightly slower node inserts |
 | `UNIQUE (url)` | "one URL = one repo", enforced even under races | URL must be normalized before insert |
 | Timestamps set in Python | simple with SQLModel | raw SQL bypasses them (see stack.md → SQLModel) |
 | `INTEGER` ids | default; plenty for repos | nodes may need `BIGINT` at huge scale |
@@ -166,7 +166,7 @@ Files: `app/kroki/*`, `app/deep_dive/answer/{answer_context,diagram,svg_figure}.
 ---
 
 ## Frontend
-Files: `frontend/` (`src/api.ts`, `scopeView.ts`, `layout.ts`, `MapCanvas.tsx`, `Breadcrumb.tsx`, `AreaNode.tsx`, `NodePanel.tsx`, `tests/scopeView.test.ts`), `app/api/main.py`
+Files: `frontend/` (`src/api.ts`, `scopeView.ts`, `layout.ts`, `MapCanvas.tsx`, `Breadcrumb.tsx`, `AreaNode.tsx`, `DeepDivePanel.tsx`, `tests/scopeView.test.ts`), `app/api/main.py`
 
 **What:** a React + TypeScript app built with Vite. React Flow draws the map one scope per screen: the scope card (repo or area) on the left, its children in a column on the right, a breadcrumb floating over the canvas. Clicking an area with children makes it the scope: its card keeps its React Flow id, so a CSS transition on the node transform slides it into the parent slot while the new children and edges fade in and `setCenter(…, {duration})` eases the camera onto the scope card (zoom unchanged). `prefers-reduced-motion` turns all of it off. `npm run types` dumps `app.openapi()` and `openapi-typescript` turns it into `src/schema.d.ts`, the only place API shapes exist on the client. Dev: Vite proxies `/repos` and `/nodes` to uvicorn. Prod: FastAPI mounts `frontend/dist` at `/` after the routers, only if the folder exists.
 
@@ -234,3 +234,72 @@ Files: `app/deep_dive/graph/*`, `app/deep_dive/make_write.py`, `app/deep_dive/wo
 **Failure modes:** a leftover thread after a failed `forget` is harmless (node ids are per snapshot) and gets cleaned on the next no-op redelivery. The checkpointer tables are created by `setup()`, outside Alembic: a schema reset must drop them too. The checkpointer's connection is not thread-safe; the worker processes jobs one at a time.
 
 **At scale:** checkpoints add one row write per node per job; negligible next to the agent cost. The thread could key on `(node_id, prompt version)` if prompts change between deliveries.
+
+---
+
+## Agent runtime (Claude Agent SDK as a second loop)
+Files: `app/agent/agent_runner.py`, `app/agent/make_runner.py`, `app/agent/run_agent_sdk.py`, `app/agent_sdk/*`
+
+**What:** the three agents call an `AgentRunner` instead of a chat model: system prompt, task, tools, answer schema, turn budget in; a validated answer or `AgentFailed` out. The dashboard's Settings page picks the runtime; it lives in Redis (`settings:agent_runtime`) and every worker reads it when an agent starts. `make_runner` builds each runtime the process's `AGENT_RUNTIMES` allows and `dispatch_runner` picks per call. `gateway` is our own loop on the in-house gateway. `agent_sdk` is the Claude Agent SDK, Claude Code as a library: it spawns the bundled binary, runs the tool loop itself, calls our workspace tools as in-process MCP tools and returns JSON in the answer schema. Follow-ups (rejection, nudge, wrap-up) resume the SDK session.
+
+**Why:**
+- The developer pays for a Claude Code subscription; on their own host the binary uses that login, so local indexing and deep dives run without the API key.
+- One seam: all three agents already went through one function with one signature, so a second runtime is one Protocol and one factory, and callers don't change.
+- A real A/B between a hand-built loop and a vendor harness, with the same log line shape plus the SDK's cost estimate.
+- The SDK keeps thinking across turns, which the gateway contract drops.
+
+**Rejected:**
+- *The SDK behind the gateway's `/v1/chat`:* the SDK never hands a tool call back; it executes tools itself, and the worker holds the checkout. It replaces the loop, not the model.
+- *The SDK inside the Docker workers (with a key-swapping `/v1/messages` proxy in the gateway):* only useful for API-key billing, which the gateway already does; it would put a binary and a key path into the sandbox for no gain.
+- *Mounting the Claude Code login into containers, or proxying it through the gateway:* Anthropic does not allow offering claude.ai login in a product; the login stays a host-only developer convenience.
+- *A fake SDK message stream for unit tests:* it would test my assumptions about the SDK, not the SDK. The pure tool conversion has unit tests; the run has a live Haiku check.
+- *A per-job runtime field in the queue payload:* the choice is "which bill do I want right now", not a property of a repo or a node; one global setting matches how it's used and keeps the job schemas and the API bodies unchanged.
+- *A Postgres settings table:* durable, but one operational toggle would cost a model, a migration and a session per read. Redis already holds the agent slots and the dedup keys with the same lifetime; a missing key is a safe default.
+- *Failing a job whose runtime this process can't run:* a compose worker would dead-letter every job while the dashboard says `agent_sdk`. It warns and uses the gateway instead; the mismatch is a deployment fact, not a data problem.
+- *Parsing `AGENT_RUNTIMES` into the enum inside `app.config`:* `app.config` importing `app.agent` while `app.agent.make_runner` imports `app.config` is a cycle; the string is parsed once at startup in `make_runner`, where a typo still fails before any job runs.
+
+**Failure modes:** a Docker index worker and a host worker on the same stream both take jobs, so with the setting on `agent_sdk` the Docker one still bills the API key; stop the compose workers when everything should run on the login. The setting is read per agent, so a change mid-index switches the remaining agents, not the running one. The CLI reports "out of turns" as an error result that arrives as an exception or as the last message depending on its exit code, so both paths feed one handler. Without `strict_mcp_config` and empty `setting_sources`, the binary behaves like interactive Claude Code: a first run sent 400k tokens of the developer's MCP tool schemas, and a repo's project settings could run hooks. The binary validates the answer schema as strict JSON Schema, and Pydantic emits OpenAPI's `discriminator` for tagged unions: the first live deep dive died before its first turn until the wrapper stripped that key (the index schema has no unions, so unit tests and the index run never saw it). Resume needs the session files under the Claude config dir. A follow-up gets a fixed `wrap_up_turns`, where `run_agent` gives the remaining budget. The login's rate limits are shared with interactive Claude Code; a full Opus index can exhaust a window. `total_cost_usd` is a client-side estimate.
+
+**At scale:** production stays on `gateway`: one key holder, one egress rule set, per-turn control. The SDK runtime could run on an API key by setting `ANTHROPIC_API_KEY` in `AgentSdkSettings.env`, but then it only trades our loop for a binary per agent. Concurrency is bounded by the Redis agent slots in both runtimes.
+
+## Focused deep dives and the whole-repo deep dive
+Files: `app/deep_dive/answer/deep_dive_answer.py`, `app/deep_dive/prompts/write_system.md`, `app/deep_dive/prompts/write_repo_task.md`, `app/models/deep_dive.py`, `app/api/routes/repo_deep_dives.py`, `migrations/versions/2e428da2a463_root_deep_dives.py`
+
+**What:** the writer first names the three things a reader must leave with (core mechanism, main trade-off, main failure) and writes at most five sections around them. A validator caps the page at 5 sections, 900 words of paragraph and callout text, 4 callouts, 3 tech stack entries and 5 questions. Separately, a deep dive can now be about the whole repo: `deep_dives.node_id` is nullable, every row carries `repo_id`, and `/repos/{id}/deep-dive` mirrors the node routes. Clicking the repo card on the map opens it.
+
+**Why:**
+- Measured before the change: 9 to 11 sections and 1,600 to 2,100 words of section prose per page, with edge cases at the same weight as the core idea. The old prompt asked for eight sections and told the model never to trade basics for findings, so it kept everything.
+- A validator, not just prompt text: models drift past soft length limits, and a rejection with the word count in it is something the one retry can fix.
+- Nullable `node_id` keeps "the repo row is the root" true; the root deep dive is a fact about the repo, not a fake area.
+
+**Rejected:**
+- *A hidden root `Node` row:* smaller diff (every node route works unchanged), but every tree query would have to skip it, and the check `cardinality(paths) > 0` would need a fake `""` path.
+- *`snapshot_id` only on root rows, with a CHECK that exactly one of the two is set:* list queries would need a COALESCE join through the node. Setting it always makes every list a direct join.
+- *A per-section word limit:* sections differ too much in honest size; one page-wide budget lets the model spend words where the area needs them.
+
+**Failure modes:** a first draft over the budget costs the one retry; two misses fail the job like any other invalid answer. The 900-word cap is set from four sample pages, not from a run under the new prompt, so it needs checking against real output. Nothing in the database stops a row whose `snapshot_id` differs from its node's snapshot; only the API sets both, from the node. The root deep dive's quality depends on indexing's top-level descriptions, which go into its task.
+
+**At scale:** a composite FK `(node_id, snapshot_id) → nodes(id, snapshot_id)` would make the snapshot/node pairing a database guarantee.
+
+---
+
+## Re-indexing: versioned snapshots
+Files: `app/models/snapshot.py`, `app/indexing/index_repo.py`, `app/api/routes/repos.py`, `migrations/versions/c58189f08c6d_snapshots.py`, `frontend/src/Reindex.tsx`
+
+**What:** a `snapshots` table (repo, commit, unique per pair) owns each tree and its deep dives. `repos.current_snapshot_id` says which one `/map` shows. `POST /repos/{id}/reindex` reads HEAD with `git ls-remote` and queues a job keyed on `url:sha`, unless HEAD is already current. The worker clones HEAD, builds the snapshot unless it exists, and moves the pointer under a fence (`head_seen_at`, read from the DB clock before cloning). `GET /deep-dives/{id}/html` reaches any page, including old snapshots' root pages.
+
+**Why:**
+- Immutable trees keep the old safety arguments (no cycles, no partial reads) and keep every old deep dive valid for its own commit.
+- The unique (repo, commit) key makes a repeated job a no-op without any coordination.
+- The pointer is the one overwrite in the system, so it is the one place with a fencing token.
+
+**Rejected:**
+- *Edit the tree in place:* breaks deep dives, needs a cycle guard on every edge insert, and exposes half-updated trees.
+- *`commit_sha` on nodes, no table:* the database can't enforce one tree per commit.
+- *Last-finisher-wins pointer (no fence):* a slow job on an older commit could roll the repo back.
+- *A compare-and-set on the pointer value seen at start:* rejects a newer job whenever an older one finished first.
+- *Worker wall clock for the fence:* skew between machines can reorder jobs.
+
+**Failure modes:** a force-push back to a commit queued before is not re-queued (dedup marker exists), so the pointer stays on the newer commit; the client gives up after 15 min. Old snapshots and their trees are never deleted. Jobs queued with the old `{repo_id}` deep dive payload fail validation after the deploy and dead-letter.
+
+**At scale:** garbage-collect snapshots no deep dive points at; a webhook could call the reindex route on push; a per-node result cache keyed on (repo, commit, paths) would let a re-index reuse agents for areas whose files didn't change.

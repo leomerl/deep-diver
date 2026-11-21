@@ -13,7 +13,9 @@ export const AREA_TYPE = "area";
 export const REPO_TYPE = "repo";
 
 export type AreaData = { node: ScopeNode; selected: boolean; isScope: boolean };
-export type RepoData = { repo: RepoRead; areaCount: number };
+export type RepoData = { repo: RepoRead; areaCount: number; selected: boolean };
+/** A selected map card: an area's node id, or the repo card. */
+export type Selection = number | typeof REPO_NODE_ID | null;
 export type AreaNode = Node<AreaData, typeof AREA_TYPE>;
 export type RepoNode = Node<RepoData, typeof REPO_TYPE>;
 
@@ -21,7 +23,7 @@ export function layout(
   view: ScopeView,
   repo: RepoRead,
   areaCount: number,
-  selectedId: number | null,
+  selectedId: Selection,
 ): { nodes: (AreaNode | RepoNode)[]; edges: Edge[] } {
   const size = { width: NODE_W, height: NODE_H }; // the DOM box must match these coordinates, so size stays here, not in CSS
   const columnHeight = view.children.length * NODE_H + Math.max(0, view.children.length - 1) * GAP_Y;
@@ -30,7 +32,7 @@ export function layout(
   // The scope card keeps the id it had as a child, so React Flow moves the same element and the CSS transition animates it.
   const root: AreaNode | RepoNode =
     scope === undefined
-      ? { id: REPO_NODE_ID, type: REPO_TYPE, position: rootPosition, data: { repo, areaCount }, selectable: false, style: size }
+      ? { id: REPO_NODE_ID, type: REPO_TYPE, position: rootPosition, data: { repo, areaCount, selected: selectedId === REPO_NODE_ID }, style: size }
       : {
           id: String(scope.id),
           type: AREA_TYPE,

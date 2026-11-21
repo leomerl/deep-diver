@@ -4,21 +4,23 @@ from collections.abc import Callable
 from contextlib import AbstractContextManager
 from pathlib import Path
 
-from langchain_core.language_models import BaseChatModel
-
-from app.agent import run_agent
+from app.agent import AgentRunner
 from app.workspace import ImportGraph, Workspace, load_import_graph, make_workspace_tools
 
-from .answer import AnswerContext, DeepDiveAnswer, RenderDiagram
+from .answer import (
+    MAX_CALLOUTS, MAX_PROSE_WORDS, MAX_SECTIONS, MAX_TECH, AnswerContext, DeepDiveAnswer, RenderDiagram,
+)
 from .deep_dive_settings import DeepDiveSettings
 from .humanizer_rules import BANNED_PHRASES, BANNED_WORDS
 
 PROMPTS = Path(__file__).with_name("prompts")
-# The banned lists are filled in from humanizer_rules, the same lists the validator checks: one source, no drift.
+# The banned lists and the budget are filled in from the same constants the validator checks: one source, no drift.
 SYSTEM_PROMPT = (PROMPTS / "write_system.md").read_text(encoding="utf-8").format(
-    banned_words=", ".join(BANNED_WORDS), banned_phrases=", ".join(f'"{p}"' for p in BANNED_PHRASES)
+    banned_words=", ".join(BANNED_WORDS), banned_phrases=", ".join(f'"{p}"' for p in BANNED_PHRASES),
+    max_sections=MAX_SECTIONS, max_words=MAX_PROSE_WORDS, max_callouts=MAX_CALLOUTS, max_tech=MAX_TECH,
 )
 TASK_PROMPT = (PROMPTS / "write_task.md").read_text(encoding="utf-8")
+REPO_TASK_PROMPT = (PROMPTS / "write_repo_task.md").read_text(encoding="utf-8")
 
 type Slot = Callable[[], AbstractContextManager[None]]  # one of the agent slots shared with indexing
 
@@ -26,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 
 def write_deep_dive(
-    model: BaseChatModel,
+    run: AgentRunner,
     settings: DeepDiveSettings,
     slot: Slot,
     render_diagram: RenderDiagram,
@@ -37,8 +39,8 @@ def write_deep_dive(
     """Run the agent over the checkout until it submits an answer that validates. Raises AgentFailed."""
     graph = import_graph(workspace.root, settings.import_graph_timeout_s)
     with slot():
-        return run_agent(
-            model, SYSTEM_PROMPT, task, make_workspace_tools(workspace, graph), DeepDiveAnswer,
+        return run(
+            SYSTEM_PROMPT, task, make_workspace_tools(workspace, graph), DeepDiveAnswer,
             settings.max_turns, settings.wrap_up_turns, label, context=AnswerContext(workspace, render_diagram),
         )
 

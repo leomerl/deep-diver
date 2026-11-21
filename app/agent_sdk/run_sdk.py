@@ -18,6 +18,7 @@ from .agent_sdk_error import AgentSdkError
 from .mcp_tools import to_sdk_tools
 from .sdk_result import SdkResult
 from .settings import AgentSdkSettings
+from .strict_schema import strict_json_schema
 
 SERVER = "workspace"
 JSON_SCHEMA_FORMAT = "json_schema"
@@ -62,7 +63,7 @@ def run_sdk(
         strict_mcp_config=True,
         setting_sources=[],
         allowed_tools=[f"mcp__{SERVER}__{tool.name}" for tool in tools],
-        output_format={"type": JSON_SCHEMA_FORMAT, "schema": answer_schema},
+        output_format={"type": JSON_SCHEMA_FORMAT, "schema": strict_json_schema(answer_schema)},
         max_turns=max_turns,
         resume=resume,
         env={**BASE_ENV, **settings.env},

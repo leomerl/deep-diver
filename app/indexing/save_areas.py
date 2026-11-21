@@ -3,11 +3,11 @@ from sqlmodel import Session
 from app.models import Edge, EdgeKind, Node, TreeNode
 
 
-def save_areas(session: Session, repo_id: int, areas: list[TreeNode]) -> None:
+def save_areas(session: Session, snapshot_id: int, areas: list[TreeNode]) -> None:
     """Insert the tree as nodes plus `contains` edges, one level at a time, in the caller's transaction."""
     level: list[tuple[TreeNode, int | None]] = [(area, None) for area in areas]
     while level:
-        rows = [Node(**tree.model_dump(exclude={"children"}), repo_id=repo_id) for tree, _ in level]
+        rows = [Node(**tree.model_dump(exclude={"children"}), snapshot_id=snapshot_id) for tree, _ in level]
         session.add_all(rows)
         session.flush()  # assigns ids: this level's edges and the next level need them
         session.add_all([

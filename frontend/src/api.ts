@@ -7,8 +7,13 @@ export type EdgeRead = components["schemas"]["EdgeRead"];
 export type RepoMap = components["schemas"]["RepoMap"];
 export type DeepDiveRead = components["schemas"]["DeepDiveRead"];
 export type DeepDiveCreate = components["schemas"]["DeepDiveCreate"];
+export type DeepDiveListItem = components["schemas"]["DeepDiveListItem"];
+export type InterviewQuestionListItem = components["schemas"]["InterviewQuestionListItem"];
 export type UserRead = components["schemas"]["UserRead"];
 export type GitHubRepo = components["schemas"]["GitHubRepo"];
+export type AppSettings = components["schemas"]["AppSettings"];
+export type AgentRuntime = components["schemas"]["AgentRuntime"];
+export type SnapshotBase = components["schemas"]["SnapshotBase"];
 type ValidationError = components["schemas"]["ValidationError"];
 
 const isValidationErrors = (detail: unknown): detail is ValidationError[] =>
@@ -43,17 +48,41 @@ export const addRepo = (url: string): Promise<RepoCreate> =>
 
 export const getMap = (repoId: number): Promise<RepoMap> => request(`/repos/${repoId}/map`);
 
+/** 202 with the HEAD commit the job will index; equal to the repo's commit when it is already current. */
+export const reindexRepo = (repoId: number): Promise<SnapshotBase> =>
+  request(`/repos/${repoId}/reindex`, { method: "POST" });
+
 /** The logged-in user, or null. Login itself is a plain navigation to /auth/github/login. */
 export const me = (): Promise<UserRead | null> => request("/auth/me");
 
 /** 401 (as ApiError) when logged out. */
 export const githubRepos = (): Promise<GitHubRepo[]> => request("/auth/github/repos");
 
+/** What a deep dive is about: one node, or the whole repo. The kind is the URL's first segment. */
+export type DeepDiveTarget = { kind: "nodes" | "repos"; id: number };
+
+const deepDivePath = ({ kind, id }: DeepDiveTarget): string => `/${kind}/${id}/deep-dive`;
+
 /** 404 (as ApiError) until the worker has written the page. */
-export const getDeepDive = (nodeId: number): Promise<DeepDiveRead> => request(`/nodes/${nodeId}/deep-dive`);
+export const getDeepDive = (target: DeepDiveTarget): Promise<DeepDiveRead> => request(deepDivePath(target));
 
-/** 202; idempotent, a node already queued or finished is not re-queued. */
-export const requestDeepDive = (nodeId: number): Promise<DeepDiveCreate> =>
-  request(`/nodes/${nodeId}/deep-dive`, { method: "POST" });
+/** 202; idempotent, a target already queued or finished is not re-queued. */
+export const requestDeepDive = (target: DeepDiveTarget): Promise<DeepDiveCreate> =>
+  request(deepDivePath(target), { method: "POST" });
 
-export const deepDiveHtmlUrl = (nodeId: number): string => `/nodes/${nodeId}/deep-dive/html`;
+export const deepDiveHtmlUrl = (target: DeepDiveTarget): string => `${deepDivePath(target)}/html`;
+
+/** Any page by its own id, older snapshots' included (the repo route only reaches the current root page). */
+export const deepDivePageUrl = (deepDiveId: number): string => `/deep-dives/${deepDiveId}/html`;
+
+/** Every written deep dive, newest first. */
+export const listDeepDives = (): Promise<DeepDiveListItem[]> => request("/deep-dives");
+
+/** The whole interview question bank, each with the area it is about. */
+export const listInterviewQuestions = (): Promise<InterviewQuestionListItem[]> => request("/interview-questions");
+
+export const getSettings = (): Promise<AppSettings> => request("/settings");
+
+/** Workers read the setting when each agent starts, so this applies to the next agent, not the next restart. */
+export const putSettings = (settings: AppSettings): Promise<AppSettings> =>
+  request("/settings", { method: "PUT", body: JSON.stringify(settings) });

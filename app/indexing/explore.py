@@ -5,9 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import AbstractContextManager
 from pathlib import Path
 
-from langchain_core.language_models import BaseChatModel
-
-from app.agent import AgentFailed, run_agent
+from app.agent import AgentFailed, AgentRunner
 from app.llm.gateway_chat_model import GatewayAnswerError
 from app.models import TreeNode
 from app.workspace import ImportGraph, Workspace, load_import_graph, make_workspace_tools
@@ -32,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 
 def explore_repo(
-    model: BaseChatModel, root: Path, files: list[str], repo_name: str, settings: ExploreSettings, slot: Slot
+    run: AgentRunner, root: Path, files: list[str], repo_name: str, settings: ExploreSettings, slot: Slot
 ) -> list[TreeNode]:
     """Map the checkout at `root` into a tree of areas: the top-level areas, each with its sub-areas filled in.
 
@@ -47,9 +45,9 @@ def explore_repo(
     def split(pending: Pending) -> list[TreeNode]:
         node, breadcrumb = pending
         workspace = Workspace(root=root, files=known, scope=tuple(node.paths))
-        return _split(model, workspace, graph, settings, slot, repo_name, breadcrumb)
+        return _split(run, workspace, graph, settings, slot, repo_name, breadcrumb)
 
-    top = _split(model, Workspace(root=root, files=known, scope=WHOLE_REPO), graph, settings, slot, repo_name, ())
+    top = _split(run, Workspace(root=root, files=known, scope=WHOLE_REPO), graph, settings, slot, repo_name, ())
     level: list[Pending] = [(node, (node.name,)) for node in top]
     with ThreadPoolExecutor(max_workers=settings.parallel_agents) as pool:
         while level:
@@ -65,7 +63,7 @@ def explore_repo(
 
 
 def _split(
-    model: BaseChatModel,
+    run: AgentRunner,
     workspace: Workspace,
     graph: ImportGraph,
     settings: ExploreSettings,
@@ -82,8 +80,8 @@ def _split(
     try:
         # The slot covers the whole run, tools included, so many agents can't overload the machine.
         with slot():
-            answer = run_agent(
-                model, SYSTEM_PROMPT, task, make_workspace_tools(workspace, graph), SubmitAreas,
+            answer = run(
+                SYSTEM_PROMPT, task, make_workspace_tools(workspace, graph), SubmitAreas,
                 settings.max_turns, settings.wrap_up_turns, label, context=workspace,
             )
     except (AgentFailed, GatewayAnswerError):

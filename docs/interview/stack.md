@@ -32,7 +32,7 @@ Each section covers what the technology is, how it works inside (as far as inter
 - `CHECK (source_id <> target_id)` on `edges` blocks self-loops.
 
 **Indexes (B-tree):**
-- A composite index is usable by its *leftmost prefix*: `(a, b)` also serves `WHERE a = ?`. `/map` filters only on `repo_id`, so `ix_nodes_repo_id` is a plain single-column index.
+- A composite index is usable by its *leftmost prefix*: `(a, b)` also serves `WHERE a = ?`. `/map` filters only on `snapshot_id`, so `ix_nodes_snapshot_id` is a plain single-column index.
 - `UNIQUE (source_id, target_id)` on `edges` is also an index on `source_id`, so outgoing edges need no separate index. Incoming edges need `ix_edges_target_id`.
 - Every index speeds up reads and slows down writes (each one is updated on every insert). We only index known queries.
 
