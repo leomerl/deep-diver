@@ -303,3 +303,20 @@ Files: `app/models/snapshot.py`, `app/indexing/index_repo.py`, `app/api/routes/r
 **Failure modes:** a force-push back to a commit queued before is not re-queued (dedup marker exists), so the pointer stays on the newer commit; the client gives up after 15 min. Old snapshots and their trees are never deleted. Jobs queued with the old `{repo_id}` deep dive payload fail validation after the deploy and dead-letter.
 
 **At scale:** garbage-collect snapshots no deep dive points at; a webhook could call the reindex route on push; a per-node result cache keyed on (repo, commit, paths) would let a re-index reuse agents for areas whose files didn't change.
+
+## LLM usage tracking at the gateway
+Files: `app/gateway/record_call.py`, `app/gateway/cost.py`, `app/gateway/prices.py`, `app/models/llm_call.py`, `app/llm/gateway_contract/caller.py`, `app/agent/make_runner.py`, `app/usage/report.py`, `migrations/versions/980a43208d26_llm_calls.py`
+
+**What:** one `llm_calls` row per answered model call (model, four token counts, cost in dollars, agent label, run id), written by the gateway; a report prints spend per day and per agent label.
+
+**Why:** $44 was spent and nothing could say on what. The only per-agent record was a stdout log line that a container rebuild deletes, and it added input and output tokens into one number, though output costs five times more.
+
+**Rejected:**
+- *Recording in the worker:* it knows the job, but every new caller would have to remember to record, and a crash mid-run loses the rows for calls already paid. The gateway is the one place every paid call passes through.
+- *Passing the queue's delivery attempt down to each call:* about six signatures for the same answer that "one label, two run ids" gives.
+- *Storing tokens only and pricing at report time:* prices change; the report should show what was paid.
+- *Failing the request when the insert fails:* the call is already paid; an error makes the agent retry and pay again. The row is logged with every field instead.
+
+**Failure modes:** a fallback-rescued call is priced entirely at the answering model's rates (marked `shortcut:` in `cost.py`). An answer the gateway can't convert (an unexpected stop reason) is paid but not recorded. Runs on the Claude Code login never reach the gateway.
+
+**At scale:** a daily cap in the gateway that sums today's `cost_usd` and returns 429; per-repo attribution by adding the repo to the caller.

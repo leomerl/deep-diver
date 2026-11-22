@@ -9,7 +9,7 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.runnables import Runnable, RunnableLambda
 from pydantic import BaseModel, Field, SecretStr
 
-from app.llm.gateway_contract import CHAT_PATH, ChatRequest, ChatResponse, ResponseSchema, ToolSpec
+from app.llm.gateway_contract import CHAT_PATH, Caller, ChatRequest, ChatResponse, ResponseSchema, ToolSpec
 
 from .from_contract import from_contract
 from .to_contract import to_contract
@@ -30,6 +30,7 @@ class GatewayChatModel(BaseChatModel):
     max_tokens: int
     timeout_s: float
     api_key: SecretStr | None = None
+    caller: Caller | None = None  # sent with every call; set per agent run with model_copy
     # One pooled client per model instance; tests inject one with a mock transport.
     http_client: httpx.Client = Field(default_factory=httpx.Client, exclude=True)
 
@@ -56,6 +57,7 @@ class GatewayChatModel(BaseChatModel):
             tools=tools or [],
             response_schema=response_schema,
             max_tokens=self.max_tokens,
+            caller=self.caller,
         )
         response = self.http_client.post(
             f"{self.base_url}{CHAT_PATH}",

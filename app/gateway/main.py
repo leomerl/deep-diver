@@ -4,22 +4,27 @@ The app talks only to this contract; provider, keys, provider retries, prompt ca
 live here.
 """
 import hmac
-from functools import cache
+from collections.abc import Callable
+from functools import cache, partial
 from typing import Annotated
 
 import anthropic
 from fastapi import Depends, FastAPI, Header, HTTPException, status
+from sqlmodel import create_engine
 
-from app.llm.gateway_contract import CHAT_PATH, ChatRequest, ChatResponse
+from app.llm.gateway_contract import CHAT_PATH, Caller, ChatRequest, ChatResponse, Usage
 
 from .from_anthropic import from_anthropic
-from .settings import GATEWAY_KEY
+from .record_call import record_call
+from .settings import DATABASE_URL, GATEWAY_KEY
 from .to_anthropic import anthropic_messages, anthropic_tools, output_config, system_prompt
 
 # On a policy refusal the API re-runs the request on a fallback model it picks by refusal category.
 FALLBACK_BETA = "server-side-fallback-2026-07-01"
 FALLBACK_MODE = "default"
 BEARER_PREFIX = "Bearer "
+
+type Recorder = Callable[[str, Usage, Caller | None], None]  # (model, usage, caller)
 
 app = FastAPI(title="deep-diver AI gateway")
 
@@ -38,7 +43,13 @@ def check_key(authorization: Annotated[str | None, Header()] = None) -> None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid gateway key")
 
 
+@cache
+def get_recorder() -> Recorder:
+    return partial(record_call, create_engine(DATABASE_URL))
+
+
 ClientDep = Annotated[anthropic.Anthropic, Depends(get_client)]
+RecorderDep = Annotated[Recorder, Depends(get_recorder)]
 
 
 @app.get("/health")
@@ -47,7 +58,7 @@ def health() -> dict[str, str]:
 
 
 @app.post(CHAT_PATH, dependencies=[Depends(check_key)])
-def chat(request: ChatRequest, client: ClientDep) -> ChatResponse:
+def chat(request: ChatRequest, client: ClientDep, record: RecorderDep) -> ChatResponse:
     """One model turn. 4xx = the request is wrong (don't retry); 429/502 = retry later."""
     try:
         message = client.beta.messages.create(
@@ -69,6 +80,9 @@ def chat(request: ChatRequest, client: ClientDep) -> ChatResponse:
     except (anthropic.APIStatusError, anthropic.APIConnectionError) as e:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"provider error: {e}") from e
     try:
-        return from_anthropic(message)
+        response = from_anthropic(message)
     except ValueError as e:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(e)) from e
+    # message.model, not request.model: a refusal fallback answers with a different model and its own rates.
+    record(message.model, response.usage, request.caller)
+    return response

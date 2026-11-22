@@ -17,6 +17,7 @@ from .grouping import Grouping
 from .index_job import IndexJob
 from .interview_question import InterviewQuestion, InterviewQuestionBase, InterviewQuestionRead
 from .interview_question_list_item import InterviewQuestionListItem
+from .llm_call import LlmCall, LlmCallBase
 from .node import Node, NodeBase, NodeRead
 from .node_with_children import NodeWithChildren
 from .repo import Repo, RepoBase, RepoCreate, RepoRead, RepoStatus
@@ -29,6 +30,7 @@ __all__ = [
     "DeepDive", "DeepDiveBase", "DeepDiveCreate", "DeepDiveListItem", "DeepDiveRead",
     "Edge", "EdgeBase", "EdgeKind", "EdgeRead",
     "InterviewQuestion", "InterviewQuestionBase", "InterviewQuestionListItem", "InterviewQuestionRead",
+    "LlmCall", "LlmCallBase",
     "Grouping", "IndexJob", "Node", "NodeBase", "NodeRead", "NodeWithChildren", "TreeNode",
     "Repo", "RepoBase", "RepoCreate", "RepoMap", "RepoRead", "RepoStatus", "Snapshot", "SnapshotBase",
     "User", "UserBase", "UserRead",

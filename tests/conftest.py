@@ -33,6 +33,6 @@ def migrated_db() -> None:
 @pytest.fixture
 def session(migrated_db: None) -> Iterator[Session]:
     with Session(engine) as s:
-        s.execute(text("TRUNCATE users, repos, nodes, edges RESTART IDENTITY CASCADE"))
+        s.execute(text("TRUNCATE users, repos, nodes, edges, llm_calls RESTART IDENTITY CASCADE"))
         s.commit()
         yield s

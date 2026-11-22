@@ -112,6 +112,10 @@ services:
       # Compose reads these from .env; only this variable crosses into the container, not the whole file.
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:?set ANTHROPIC_API_KEY in .env}
       GATEWAY_KEY: ${LLM_GATEWAY_KEY:-}
+      DATABASE_URL: postgresql+psycopg://dd:dd@postgres:5432/dd  # one usage row per paid call (llm_calls)
+    depends_on:
+      postgres: {condition: service_healthy}
+      migrate: {condition: service_completed_successfully}  # llm_calls must exist before the first call
     ports: ["8080:8080"]
     networks: [default, sandbox]
     healthcheck:

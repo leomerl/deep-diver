@@ -1,6 +1,8 @@
 from collections.abc import Iterator
 from types import SimpleNamespace
 
+import uuid
+
 import anthropic
 import httpx
 import httpx2
@@ -10,7 +12,7 @@ from fastapi import status
 from fastapi.testclient import TestClient
 
 from app.gateway import main
-from app.llm.gateway_contract import ChatRequest, Message, ResponseSchema, Role, ToolCall, ToolSpec
+from app.llm.gateway_contract import Caller, ChatRequest, Message, ResponseSchema, Role, ToolCall, ToolSpec
 
 REPLY = BetaMessage.model_validate({
     "id": "msg_1", "type": "message", "role": "assistant", "model": "m", "stop_sequence": None,
@@ -44,6 +46,7 @@ class FakeAnthropic:
     def __init__(self, reply: BetaMessage | Exception) -> None:
         self.reply = reply
         self.calls: list[dict[str, object]] = []
+        self.recorded: list[tuple[object, ...]] = []
         self.beta = SimpleNamespace(messages=SimpleNamespace(create=self._create))
 
     def _create(self, **kwargs: object) -> BetaMessage:
@@ -57,6 +60,7 @@ class FakeAnthropic:
 def fake() -> Iterator[FakeAnthropic]:
     client = FakeAnthropic(REPLY)
     main.app.dependency_overrides[main.get_client] = lambda: client
+    main.app.dependency_overrides[main.get_recorder] = lambda: lambda *call: client.recorded.append(call)
     yield client
     main.app.dependency_overrides.clear()
 
@@ -117,3 +121,23 @@ def test_gateway_key_is_required_when_set(fake: FakeAnthropic, monkeypatch: pyte
 
     assert _post().status_code == status.HTTP_401_UNAUTHORIZED
     assert _post(headers={"Authorization": "Bearer s3cret"}).status_code == status.HTTP_200_OK
+
+
+def test_each_answered_call_is_recorded_with_its_caller(fake: FakeAnthropic) -> None:
+    caller = Caller(label="r > Queue", run_id=uuid.uuid4())
+
+    _post(REQUEST.model_copy(update={"caller": caller}))
+
+    [(model, usage, recorded_caller)] = fake.recorded
+    assert model == "m"  # the answering model from the reply, not the requested one
+    assert (usage.input_tokens, usage.cache_read_input_tokens) == (110, 100)
+    assert recorded_caller == caller
+
+
+def test_a_failed_provider_call_is_not_recorded(fake: FakeAnthropic) -> None:
+    response = httpx2.Response(429, request=httpx2.Request("POST", "https://api.anthropic.com/v1/messages"))
+    fake.reply = anthropic.RateLimitError("slow down", response=response, body=None)
+
+    _post()
+
+    assert fake.recorded == []

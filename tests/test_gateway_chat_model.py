@@ -1,4 +1,5 @@
 import json
+import uuid
 
 import httpx
 import pytest
@@ -6,7 +7,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel
 
 from app.llm.gateway_chat_model import GatewayAnswerError, GatewayChatModel
-from app.llm.gateway_contract import ChatRequest
+from app.llm.gateway_contract import Caller, ChatRequest
 
 BASE_URL = "http://gateway.test"
 
@@ -88,3 +89,12 @@ def test_unsupported_options_fail_loudly() -> None:
         model.bind_tools([tree], tool_choice="any")
     with pytest.raises(ValueError):
         model.invoke("hi", stop=["END"])
+
+
+def test_caller_is_sent_with_every_call() -> None:
+    gateway = Recorder(_answer("ok"))
+    caller = Caller(label="r > Queue", run_id=uuid.uuid4())
+
+    _model(gateway).model_copy(update={"caller": caller}).invoke([HumanMessage("go")])
+
+    assert gateway.requests[0].caller == caller

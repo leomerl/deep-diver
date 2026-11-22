@@ -1,3 +1,4 @@
+import uuid
 from collections.abc import Callable, Sequence
 
 from langchain_core.tools import BaseTool
@@ -6,6 +7,7 @@ from pydantic import BaseModel, SecretStr
 from app.agent_sdk import AgentSdkSettings, run_sdk
 from app.config import AGENT_RUNTIMES, LLM_GATEWAY_KEY, LLM_GATEWAY_URL, LLM_MAX_TOKENS, LLM_TIMEOUT_S
 from app.llm.gateway_chat_model import GatewayChatModel
+from app.llm.gateway_contract import Caller
 
 from .agent_runner import AgentRunner
 from .agent_runtime import AgentRuntime
@@ -55,6 +57,8 @@ def _gateway_runner(model_name: str) -> AgentRunner:
         system: str, task: str, tools: Sequence[BaseTool], answer: type[T], max_turns: int,
         wrap_up_turns: int, label: str, context: object | None = None,
     ) -> T:
-        return run_agent(model, system, task, tools, answer, max_turns, wrap_up_turns, label, context)
+        # A copy per run (same HTTP pool): the gateway's usage rows can then tell two runs of one label apart.
+        run_model = model.model_copy(update={"caller": Caller(label=label, run_id=uuid.uuid4())})
+        return run_agent(run_model, system, task, tools, answer, max_turns, wrap_up_turns, label, context)
 
     return run

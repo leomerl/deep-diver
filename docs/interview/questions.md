@@ -643,3 +643,19 @@ Autogenerate gave the schema changes; it can't move data. I added the columns as
 
 **Q: What's the known gap?**
 If HEAD goes back to a commit that was queued before (a force-push revert), its dedup marker still exists, so nothing is queued and the pointer stays on the newer commit. The client gives up after its poll limit. The fix is to move the pointer in the API when that snapshot already exists. Old snapshots are also never deleted; collecting the ones no deep dive uses is a TODO.
+
+---
+
+## LLM usage tracking
+
+**Q: How do you know what each LLM call cost?**
+The gateway is the only process with the API key, so every paid call passes through it. After each answer it stores one row: the answering model, input, output, cache-read and cache-write tokens, and the cost computed from a price list at that moment. A report groups the rows by day and by agent.
+
+**Q: How do you find work you paid for twice?**
+Each agent run sends its label and a fresh run id with every call. The same label under two run ids means the agent ran twice for the same target, for example after a worker restart re-delivered the job. That needs no change to the queue code.
+
+**Q: What if writing the usage row fails?**
+The gateway logs the row with every field and still returns the answer. Failing would make the agent retry the call and pay for it again, which costs more than a missing row that can be restored from the log.
+
+**Q: Why store the cost instead of computing it at report time?**
+Prices change. The row should say what the call cost when it was made, and the tokens are kept too, so a call to an unpriced model can still be priced later.
