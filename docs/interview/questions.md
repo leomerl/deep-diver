@@ -572,6 +572,9 @@ A tall black block on a white page is the heaviest thing on screen, and a deep d
 **Q: Why doesn't inline code have a grey background like most docs sites?**
 The writer names a lot of identifiers, often eight or more per paragraph. With a box around each one, the paragraph read as confetti and nobody wanted to start reading it. The monospace face alone is enough to mark code; Apple's developer docs do the same.
 
+**Q: Why is "at most three names per paragraph" a prompt rule and not an enforced check?**
+Every enforced check can reject the agent's answer, the agent gets one retry, and a second rejection fails the deep dive after a paid run. Name density is a judgment call: a paragraph walking through an excerpt may need four names. So the rule is in the prompt, with its reason (the page renders names in a code font, and a dense paragraph reads as a list of tokens). Enforced checks stay reserved for things that are wrong in almost every context, like banned words and dashes.
+
 **Q: Diagrams were shown at natural size before. Why shrink them now?**
 The page mostly lives in a 560px side panel, so at natural size nearly every diagram scrolled sideways. Now they shrink to the column, but never below 45rem: under that, a sequence diagram's labels get too small to read, so a very wide one still scrolls inside its panel. Fullscreen gives it room.
 

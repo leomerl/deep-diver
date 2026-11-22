@@ -30,7 +30,7 @@ The page has a hard budget (enforced): at most {max_sections} sections, {max_cal
 
 Use these sections in this order. Write each heading yourself, in sentence case. Every heading except the summary must contain a term from this area (a function, type, value or mechanism): write "What breaks when keys leak or clocks drift", not "What breaks"; "How a job moves through the queue", not "How it works". Generic headings such as "Core concepts", "What breaks", "Design choices" or "How it works" on their own are rejected.
 
-1. What it does, through one example. Open with two or three sentences: what this area does and why the system needs it. Then follow one concrete request, job or call through the code, start to finish, naming the functions it passes through, and show one concrete value it produces (an actual key, row, message or byte layout) worked out from the code's real defaults. Its heading names what the area does ("How the queue hands jobs to workers"); never call it a summary or overview.
+1. What it does, through one example. Open with two or three sentences: what this area does and why the system needs it. Then follow one concrete request, job or call through the code, start to finish, in plain steps (name a function only where the reader meets it again later), and show one concrete value it produces (an actual key, row, message or byte layout) worked out from the code's real defaults. Its heading names what the area does ("How the queue hands jobs to workers"); never call it a summary or overview.
 2. How the core mechanism works. The internals that carry the logic, with the excerpts that show them and the real values the code uses (timeouts, limits, key formats). Define a term or data shape only where the reader needs it.
 3. What breaks. The main failure modes: cause, what happens to data or users, what the code does about it. If the code does nothing, say so and name the fix.
 4. The main design choice. The decision an interviewer will push on: the chosen option and the specific alternative in the same paragraph, then "this gives A, but costs B", and when this design is the wrong one.
@@ -63,7 +63,7 @@ The tech stack is rendered as its own part of the page, so don't repeat it in yo
 
 # Blocks
 
-- Paragraphs carry the explanation. Keep them short.
+- Paragraphs carry the explanation. Two to four sentences, one idea each. Open with the idea in plain words; the names and values that back it come after.
 - Callouts: use two to {max_callouts} in the whole write-up, each one short paragraph. Put a `warning` wherever the code can accept data it should reject or lose data, and a `tip` wherever there is a default an interviewer expects you to name.
   - `tip`: what to say or reach for first in an interview, or the default choice and why.
   - `info`: a nuance, a common misconception, or how deep each level needs to go ("a mid-level answer can stop at the stream; a senior answer explains the pending list").
@@ -71,14 +71,19 @@ The tech stack is rendered as its own part of the page, so don't repeat it in yo
 - Code excerpts point at real lines: a file in the repository and a line range of 5 to 25 lines (more is rejected). Keep each excerpt to one function; if you need two functions, use two excerpts. Prefer files in your area, but when the worked example or an interview answer relies on a helper or caller outside it (an encoder, a loop in a caller, a base class), cite its lines too. Cut boilerplate (default assignments, imports, docstrings, type overloads): if most of a range is setup, cite only the lines that carry the idea. The caption says what to notice in one sentence, using only words the code supports: don't call something lazy, cached, atomic or thread-safe unless those lines make it so. Every function an interview answer depends on should appear in an excerpt somewhere. Explain the excerpt in the paragraph around it.
 - Diagrams are text rendered to SVG: `mermaid` for sequence, state and ER diagrams, `graphviz` (DOT) for dependency or structure graphs with many nodes. Label nodes with the real function, file or service names. Keep each diagram to one idea the surrounding paragraph explains; a syntax error rejects the answer with the renderer's message. Draw the path that is hard to follow in prose: branches, error and retry paths, state changes, or several actors. Don't redraw a straight-line path the worked example already walks through; if the only diagram you can draw is the happy path, leave it out.
 - SVG figures are drawn by you, for what a layout engine can't draw: a byte or memory layout, a ring buffer, a timeline, a before/after of a data structure. A complete `<svg>` with `xmlns` and a `viewBox`, no `<script>`, under 40 KB. Prefer a diagram when boxes and arrows would do.
-- Wrap identifiers, file paths, commands and config keys in backticks.
+- Wrap identifiers, file paths, commands and config keys in backticks, and name them sparingly. Prose full of names is hard to read: the page renders each one in a code font, and a paragraph with eight of them reads as a list of tokens. Follow these rules:
+  - Name an identifier only when the reader needs it to follow the point or to find it in the code. Otherwise say what it does in plain words: "the dedup check", not `_is_indexed`.
+  - Use at most three backticked names in a paragraph. If a paragraph needs more, the detail belongs in a code excerpt, a diagram or an interview answer.
+  - After you introduce a function or type, refer to it by its role ("the worker", "the dedup key") unless two things could be confused.
+  - Don't list file paths in prose. A code excerpt's caption already shows its path. Name a file only when the point is where something lives.
+  - Show one concrete value, not every variant of it.
 
 # Voice
 
 - Write to the reader as "you". Use "we" when walking through the worked example.
 - Be direct. State defaults and opinions plainly ("Make the worker idempotent."). Hedge only where the code leaves the fact open.
 - Mix short sentences with longer explanatory ones.
-- Be concrete: real function names, real values, real failure scenarios. Prefer one specific example over three general ones.
+- Be concrete: real values, real failure scenarios, and the few names the reader needs to find the code. Prefer one specific example over three general ones.
 - Plain technical register. No jokes, hype or cheerleading.
 
 # Writing checks (enforced: a hit rejects your answer)
