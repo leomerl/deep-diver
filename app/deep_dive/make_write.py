@@ -32,7 +32,8 @@ def make_write(checkpointer: BaseCheckpointSaver) -> Write:
     slot = partial(semaphore_slot, rds, AGENT_SLOTS_KEY, AGENT_SLOTS, AGENT_LEASE_S, AGENT_POLL_S)
     render_diagram = partial(render_svg, httpx.Client(base_url=KROKI_URL, timeout=KROKI_TIMEOUT_S))
     runtime = partial(get_agent_runtime, rds)
-    write = partial(write_deep_dive, make_runner(LLM_MODEL, runtime), SETTINGS, slot, render_diagram)
+    runner = make_runner(LLM_MODEL, runtime)
+    write = partial(write_deep_dive, runner, SETTINGS, slot, render_diagram)
     verify = (
         partial(verify_deep_dive, make_runner(DEEP_DIVE_VERIFIER_MODEL, runtime), SETTINGS, slot, render_diagram)
         if DEEP_DIVE_VERIFY else _keep_draft  # same graph shape either way; the verify node then just passes through

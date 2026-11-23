@@ -14,8 +14,9 @@ from app.git import list_files, shallow_clone
 from app.indexing.index_repo import index_repo
 from app.indexing.make_explore import make_explore
 from app.indexing.streams import INDEX_DEAD_STREAM, INDEX_GROUP, INDEX_STREAM, PAYLOAD_FIELD
+from app.jobs import record_job_event
 from app.models import IndexJob
-from app.queue import WorkLoopSettings, ensure_group, work_loop
+from app.queue import ReportStep, WorkLoopSettings, ensure_group, work_loop
 
 CLONE_TIMEOUT_S = 300
 GIT_TIMEOUT_S = 30  # local commands on an existing checkout
@@ -30,7 +31,7 @@ def main() -> None:
     ls = partial(list_files, timeout_s=GIT_TIMEOUT_S)
     explore = make_explore()
 
-    def handle(fields: dict[str, str]) -> None:
+    def handle(fields: dict[str, str], report_step: ReportStep) -> None:  # one step: nothing to report
         job = IndexJob.model_validate_json(fields[PAYLOAD_FIELD])
         with Session(engine) as session:
             clone = partial(shallow_clone, timeout_s=CLONE_TIMEOUT_S, env=git_env(session, job.url, job.user_id))
@@ -50,7 +51,8 @@ def main() -> None:
     )
     ensure_group(rds, INDEX_STREAM, INDEX_GROUP)
     logger.info("worker %s reading %s", consumer, INDEX_STREAM)
-    work_loop(rds, settings, consumer, handle, stop)
+    observe = partial(record_job_event, engine, INDEX_STREAM, consumer)
+    work_loop(rds, settings, consumer, handle, stop, observe)
     logger.info("worker %s stopped", consumer)
 
 

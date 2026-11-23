@@ -2,7 +2,7 @@
 
 Maps a git repo into a tree of code areas, and writes an AI deep dive about any area you click.
 
-You add a repo by URL (or pick one from your GitHub account). A worker clones it and an agent groups the code into areas and sub-areas. The frontend draws that tree as a map. Clicking an area queues a deep dive: one agent writes the page from the code, a second one verifies it against the code, and the result is stored as an HTML page you can read in the app.
+You add a repo by URL (or pick one from your GitHub account). A worker clones it and an agent groups the code into areas and sub-areas. The frontend draws that tree as a map. Clicking an area queues a deep dive: one agent writes the page from the code, a second one verifies it against the code, and the result is stored as an HTML page you can read in the app. A page can also get a notebook: short Python cells about the same code that run in your browser (Pyodide).
 
 [DESIGN.md](DESIGN.md) holds the requirements, the architecture and the reason behind each decision.
 
@@ -39,6 +39,9 @@ For GitHub login, create a GitHub OAuth App with the callback URL `http://localh
 | `app/api` | FastAPI: the REST API, and the built frontend at `/` |
 | `app/indexing` | Worker that clones a repo and builds its tree of areas |
 | `app/deep_dive` | Worker that writes and verifies a deep dive (LangGraph) |
+| `app/deep_dive/notebook_worker.py` | Worker that writes a runnable notebook for a finished deep dive |
+| `app/jobs` | The Jobs page's view of each queue: state, tries, and the write › verify › notebook chain |
+| `app/mcp_server` | MCP server at `/mcp`, so an agent can read the maps and deep dives |
 | `app/gateway` | LLM gateway: the only service that holds the Anthropic key |
 | `app/queue` | Job queue on Redis Streams, at-least-once delivery |
 | `app/models` | SQLModel classes: the tables and the API schemas |

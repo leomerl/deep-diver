@@ -7,7 +7,7 @@ import pytest
 from redis.exceptions import TimeoutError
 
 from app.config import rds
-from app.queue import WorkLoopSettings, enqueue_once, ensure_group, work_loop
+from app.queue import JobEventKind, ReportStep, WorkLoopSettings, enqueue_once, ensure_group, work_loop
 
 STREAM = "test:jobs"
 DLQ = "test:dead"
@@ -23,6 +23,20 @@ DEADLINE_S = 5
 work_loop_module = importlib.import_module("app.queue.work_loop")
 POLL_S = 0.02
 
+type Event = tuple[JobEventKind, int, str | None]  # (kind, delivery, detail)
+
+
+class Events:
+    def __init__(self) -> None:
+        self.seen: list[Event] = []
+
+    def observe(self, entry_id: str, kind: JobEventKind, delivery: int, detail: str | None) -> None:
+        self.seen.append((kind, delivery, detail))
+
+
+def _ignore(entry_id: str, kind: JobEventKind, delivery: int, detail: str | None) -> None:
+    pass
+
 
 @pytest.fixture(autouse=True)
 def clean_redis() -> Iterator[None]:
@@ -31,38 +45,45 @@ def clean_redis() -> Iterator[None]:
     rds.flushdb()
 
 
-def _run_in_background(handle: Callable[[dict[str, str]], None], stop: threading.Event) -> threading.Thread:
+def _run_in_background(
+    handle: Callable[[dict[str, str], ReportStep], None], stop: threading.Event, events: Events | None = None
+) -> threading.Thread:
     ensure_group(rds, STREAM, GROUP)
-    thread = threading.Thread(target=work_loop, args=(rds, SETTINGS, CONSUMER, handle, stop), daemon=True)
+    observe = _ignore if events is None else events.observe
+    thread = threading.Thread(target=work_loop, args=(rds, SETTINGS, CONSUMER, handle, stop, observe), daemon=True)
     thread.start()
     return thread
 
 
-def test_success_is_acked() -> None:
+def test_success_is_acked_and_its_steps_are_reported() -> None:
     stop = threading.Event()
     seen: list[dict[str, str]] = []
+    events = Events()
 
-    def handle(fields: dict[str, str]) -> None:
+    def handle(fields: dict[str, str], report_step: ReportStep) -> None:
         seen.append(fields)
+        report_step("write")
         stop.set()
 
     enqueue_once(rds, DEDUP_KEY, STREAM, {"payload": "x"})
-    _run_in_background(handle, stop).join(DEADLINE_S)
+    _run_in_background(handle, stop, events).join(DEADLINE_S)
 
     assert [f["payload"] for f in seen] == ["x"]
     assert rds.xpending(STREAM, GROUP)["pending"] == 0
+    assert events.seen == [(JobEventKind.started, 1, None), (JobEventKind.step, 1, "write"), (JobEventKind.done, 1, None)]
 
 
 def test_failing_job_is_retried_then_dead_lettered() -> None:
     stop = threading.Event()
     calls: list[int] = []
+    events = Events()
 
-    def handle(fields: dict[str, str]) -> None:
+    def handle(fields: dict[str, str], report_step: ReportStep) -> None:
         calls.append(1)
         raise RuntimeError("poison")
 
     enqueue_once(rds, DEDUP_KEY, STREAM, {"payload": "x"})
-    thread = _run_in_background(handle, stop)
+    thread = _run_in_background(handle, stop, events)
     deadline = time.monotonic() + DEADLINE_S
     while rds.xlen(DLQ) == 0 and time.monotonic() < deadline:
         time.sleep(POLL_S)
@@ -73,11 +94,17 @@ def test_failing_job_is_retried_then_dead_lettered() -> None:
     assert rds.xlen(DLQ) == 1
     assert rds.xpending(STREAM, GROUP)["pending"] == 0
     assert rds.exists(DEDUP_KEY) == 0
+    failed = (JobEventKind.failed, 1, "RuntimeError: poison")
+    assert events.seen == [
+        (JobEventKind.started, 1, None), failed,
+        (JobEventKind.started, 2, None), (failed[0], 2, failed[2]),
+        (JobEventKind.dead_lettered, 3, None),
+    ]
 
 
 def test_stop_ends_an_idle_loop() -> None:
     stop = threading.Event()
-    thread = _run_in_background(lambda _: None, stop)
+    thread = _run_in_background(lambda fields, report_step: None, stop)
     stop.set()
     thread.join(DEADLINE_S)
     assert not thread.is_alive()
@@ -95,6 +122,6 @@ def test_redis_outage_is_retried_not_fatal(monkeypatch: pytest.MonkeyPatch) -> N
 
     monkeypatch.setattr(work_loop_module, "reclaim_one", flaky_reclaim)
     monkeypatch.setattr(work_loop_module, "REDIS_RETRY_S", 0)
-    work_loop(rds, SETTINGS, CONSUMER, lambda fields: None, stop)
+    work_loop(rds, SETTINGS, CONSUMER, lambda fields, report_step: None, stop, _ignore)
 
     assert len(attempts) == 2  # the loop came back after the error instead of propagating it

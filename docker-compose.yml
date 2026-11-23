@@ -151,6 +151,10 @@ services:
     <<: *worker
     command: ["python", "-m", "app.deep_dive.worker"]
 
+  notebook-worker:
+    <<: *worker
+    command: ["python", "-m", "app.deep_dive.notebook_worker"]
+
 networks:
   # internal: no route to the outside. Services on both networks stay reachable from the host and from the workers.
   sandbox:

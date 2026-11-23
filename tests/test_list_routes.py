@@ -90,3 +90,40 @@ def test_lists_every_interview_question_with_its_area(session: Session) -> None:
         ("Why streams?", repo.id, dive.node_id, "Queue", "https://github.com/o/r"),
         ("What if a worker dies?", repo.id, dive.node_id, "Queue", "https://github.com/o/r"),
     ]
+
+
+NOTEBOOK_JSON = '{"title": "Run it", "cells": [{"explanation": "Go.", "code": "print(1)", "mirrors": null}]}'
+
+
+def test_notebook_is_served_typed_and_404_without_one(session: Session) -> None:
+    _, snapshot = _repo(session)
+    with_notebook = _deep_dive(session, snapshot, "Queue", datetime.now(UTC))
+    with_notebook.notebook_key = "nb.json"
+    without = _deep_dive(session, snapshot, None, datetime.now(UTC))
+    session.commit()
+    app.dependency_overrides[get_html_reader] = lambda: {"nb.json": NOTEBOOK_JSON}.__getitem__
+    try:
+        ok = client.get(f"/deep-dives/{with_notebook.id}/notebook")
+        missing = client.get(f"/deep-dives/{without.id}/notebook")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert ok.json() == {"title": "Run it", "cells": [{"explanation": "Go.", "code": "print(1)", "mirrors": None}]}
+    assert missing.status_code == 404
+    assert client.get("/deep-dives/999/notebook").status_code == 404
+
+
+def test_requesting_a_notebook_queues_it_once_and_404s_for_a_missing_page(session: Session) -> None:
+    from app.config import rds
+    from app.deep_dive.streams import NOTEBOOK_STREAM
+
+    rds.flushdb()
+    _, snapshot = _repo(session)
+    dive = _deep_dive(session, snapshot, "Queue", datetime.now(UTC))
+    session.commit()
+
+    assert client.post(f"/deep-dives/{dive.id}/notebook").json() == {"deep_dive_id": dive.id}
+    assert client.post(f"/deep-dives/{dive.id}/notebook").status_code == 202
+    assert rds.xlen(NOTEBOOK_STREAM) == 1  # the second request found the dedup marker
+    assert client.post("/deep-dives/999/notebook").status_code == 404
+    rds.flushdb()

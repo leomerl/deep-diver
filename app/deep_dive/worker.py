@@ -14,11 +14,13 @@ from app.config import DATABASE_URL, DEEP_DIVE_BUCKET, JOB_LEASE_S, JOB_MAX_DELI
 from app.deep_dive.generate_deep_dive import generate_deep_dive
 from app.deep_dive.graph import forget_thread, postgres_checkpointer
 from app.deep_dive.make_write import make_write
+from app.deep_dive.enqueue_notebook import enqueue_notebook_job
 from app.deep_dive.store_html import store_html
 from app.deep_dive.streams import DEEP_DIVE_DEAD_STREAM, DEEP_DIVE_GROUP, DEEP_DIVE_STREAM, PAYLOAD_FIELD
 from app.git import list_files, sparse_clone
+from app.jobs import record_job_event
 from app.models import DeepDiveCreate
-from app.queue import WorkLoopSettings, ensure_group, work_loop
+from app.queue import ReportStep, WorkLoopSettings, ensure_group, work_loop
 from app.storage import ensure_bucket
 
 CLONE_TIMEOUT_S = 300
@@ -37,14 +39,14 @@ def main() -> None:
     forget = partial(forget_thread, checkpointer)
     store = partial(store_html, s3, DEEP_DIVE_BUCKET)
 
-    def handle(fields: dict[str, str]) -> None:
+    def handle(fields: dict[str, str], report_step: ReportStep) -> None:
         job = DeepDiveCreate.model_validate_json(fields[PAYLOAD_FIELD])
         with Session(engine) as session:
 
             def clone(url: str, sha: str, paths: list[str], dest: Path, added_by: int | None) -> None:
                 sparse_clone(url, sha, paths, dest, CLONE_TIMEOUT_S, env=git_env(session, url, added_by))
 
-            generate_deep_dive(session, job, clone, ls, write, store, forget)
+            generate_deep_dive(session, job, clone, ls, write, store, forget, enqueue_notebook_job, report_step)
         logger.info("deep dive done for %s", job.target_key)
 
     stop = threading.Event()
@@ -61,7 +63,8 @@ def main() -> None:
     ensure_bucket(s3, DEEP_DIVE_BUCKET)
     ensure_group(rds, DEEP_DIVE_STREAM, DEEP_DIVE_GROUP)
     logger.info("worker %s reading %s", consumer, DEEP_DIVE_STREAM)
-    work_loop(rds, settings, consumer, handle, stop)
+    observe = partial(record_job_event, engine, DEEP_DIVE_STREAM, consumer)
+    work_loop(rds, settings, consumer, handle, stop, observe)
     logger.info("worker %s stopped", consumer)
 
 

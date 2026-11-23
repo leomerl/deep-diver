@@ -834,3 +834,291 @@ input {
 .reindex {
   margin-top: var(--space-3);
 }
+
+/* Page / Notebook switch in the panel header */
+.segmented {
+  display: inline-flex;
+  margin-left: auto;
+  padding: 2px;
+  background: var(--bg-inset);
+  border-radius: var(--radius);
+}
+
+.segmented__option {
+  padding: var(--space-1) var(--space-3);
+  font: inherit;
+  font-size: 13px;
+  color: var(--text-secondary);
+  background: none;
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.segmented__option[aria-pressed="true"] {
+  color: var(--text);
+  background: var(--bg);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+.segmented + .node-panel__fullscreen {
+  margin-left: 0;
+}
+
+/* Notebook */
+.node-panel__notebook {
+  flex: 1;
+  overflow: auto;
+  border-top: 1px solid var(--hairline);
+}
+
+/* `hidden` loses to the display rules above without this. */
+.node-panel__notebook[hidden],
+.node-panel__frame[hidden] {
+  display: none;
+}
+
+.notebook {
+  padding: var(--space-4);
+}
+
+.notebook__status {
+  margin: var(--space-4);
+}
+
+.notebook__toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.notebook__title {
+  flex: 1;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.notebook__hint {
+  margin: var(--space-2) 0 var(--space-4);
+}
+
+.notebook__cell {
+  padding: var(--space-4) 0;
+  border-top: 1px solid var(--hairline);
+}
+
+.notebook__explanation {
+  margin: 0 0 var(--space-2);
+  line-height: 1.5;
+}
+
+.notebook__mirrors {
+  margin: 0 0 var(--space-2);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* The textarea can't colour its text, so it lies transparent over a <pre> that shows the same code in colour.
+   Both share one grid cell and every text metric, or the caret drifts off the glyphs. The <pre> sets the size;
+   the box scrolls, never the textarea, so the layers can't scroll apart. Dark in both themes, like the page's
+   code panels: the colours are XcodeDarkStyle's (app/deep_dive/xcode_dark_style.py), minus its bold, which
+   could change glyph widths. */
+.notebook__editor {
+  display: grid;
+  overflow-x: auto;
+  background: #1f1f24;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+}
+
+.notebook__editor:focus-within {
+  border-color: var(--accent);
+  outline: 3px solid var(--accent-ring);
+}
+
+.notebook__highlight,
+.notebook__code {
+  grid-area: 1 / 1;
+  box-sizing: border-box;
+  min-width: 100%;
+  margin: 0;
+  padding: var(--space-3);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre;
+  tab-size: 4;
+  border: 0;
+}
+
+.notebook__highlight {
+  width: max-content;
+  color: #dfdfe0;
+}
+
+.notebook__code {
+  overflow: hidden;
+  color: transparent;
+  caret-color: #dfdfe0;
+  resize: none;
+  background: none;
+  outline: none;
+}
+
+.tok--comment { color: #848f9b; }
+.tok--string { color: #fc6a5d; }
+.tok--number { color: #d0bf69; }
+.tok--keyword { color: #fc5fa3; }
+.tok--builtin { color: #d0a8ff; }
+.tok--function { color: #4eb0cc; }
+.tok--class { color: #5dd8ff; }
+.tok--decorator { color: #cc9768; }
+
+.notebook__run {
+  margin-top: var(--space-2);
+}
+
+.notebook__output {
+  display: block;
+  margin-top: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border-left: 2px solid var(--hairline);
+}
+
+.notebook__output--error {
+  color: var(--danger);
+  border-left-color: var(--danger);
+}
+
+/* Jobs */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.jobs {
+  margin: var(--space-4) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.jobs__job {
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--hairline);
+}
+
+.jobs__head {
+  display: flex;
+  gap: var(--space-2);
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.jobs__label {
+  font-size: 13px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.jobs__state {
+  flex: none;
+  color: var(--text-secondary);
+  background: var(--bg-inset);
+}
+
+.jobs__state--running {
+  color: var(--accent-text);
+  background: var(--accent-tint);
+}
+
+.jobs__state--retrying,
+.jobs__state--dead {
+  color: var(--danger);
+}
+
+.jobs__state .spinner {
+  width: 9px;
+  height: 9px;
+  margin-right: var(--space-1);
+}
+
+.jobs__meta {
+  margin-top: var(--space-1);
+}
+
+.jobs__chain {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* A chevron between steps, drawn so screen readers read only the step names. */
+.jobs__step + .jobs__step::before {
+  content: "›";
+  margin-right: var(--space-1);
+  color: var(--text-tertiary);
+}
+
+.jobs__step {
+  display: inline-flex;
+  gap: var(--space-1);
+  align-items: center;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.jobs__step--passed,
+.jobs__step--running {
+  color: var(--accent-text);
+}
+
+.jobs__step--failed {
+  color: var(--danger);
+}
+
+.jobs__step .spinner {
+  margin-right: 0;
+}
+
+.jobs__details summary {
+  cursor: pointer;
+}
+
+.jobs__error {
+  margin: var(--space-2) 0 0;
+  padding: var(--space-2);
+  font: 11px/1.45 var(--font-mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: var(--bg-inset);
+  border-radius: var(--radius-sm);
+}
+
+.jobs__events {
+  margin: var(--space-1) 0 0;
+  padding-left: var(--space-4);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.jobs__events time {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Notebooks */
+.notebooks__back {
+  margin-bottom: var(--space-2);
+}

@@ -8,12 +8,17 @@ export type RepoMap = components["schemas"]["RepoMap"];
 export type DeepDiveRead = components["schemas"]["DeepDiveRead"];
 export type DeepDiveCreate = components["schemas"]["DeepDiveCreate"];
 export type DeepDiveListItem = components["schemas"]["DeepDiveListItem"];
+export type NotebookBase = components["schemas"]["NotebookBase"];
+export type NotebookJob = components["schemas"]["NotebookJob"];
 export type InterviewQuestionListItem = components["schemas"]["InterviewQuestionListItem"];
 export type UserRead = components["schemas"]["UserRead"];
 export type GitHubRepo = components["schemas"]["GitHubRepo"];
 export type AppSettings = components["schemas"]["AppSettings"];
 export type AgentRuntime = components["schemas"]["AgentRuntime"];
 export type SnapshotBase = components["schemas"]["SnapshotBase"];
+export type JobRead = components["schemas"]["JobRead"];
+export type JobState = components["schemas"]["JobState"];
+export type StepStatus = components["schemas"]["StepStatus"];
 type ValidationError = components["schemas"]["ValidationError"];
 
 const isValidationErrors = (detail: unknown): detail is ValidationError[] =>
@@ -75,6 +80,13 @@ export const deepDiveHtmlUrl = (target: DeepDiveTarget): string => `${deepDivePa
 /** Any page by its own id, older snapshots' included (the repo route only reaches the current root page). */
 export const deepDivePageUrl = (deepDiveId: number): string => `/deep-dives/${deepDiveId}/html`;
 
+/** 404 (as ApiError) when the deep dive has no notebook (`notebook_key` is null). */
+export const getNotebook = (deepDiveId: number): Promise<NotebookBase> => request(`/deep-dives/${deepDiveId}/notebook`);
+
+/** 202; idempotent. The worker queues one after every new page, so this is for older pages and failed notebooks. */
+export const requestNotebook = (deepDiveId: number): Promise<NotebookJob> =>
+  request(`/deep-dives/${deepDiveId}/notebook`, { method: "POST" });
+
 /** Every written deep dive, newest first. */
 export const listDeepDives = (): Promise<DeepDiveListItem[]> => request("/deep-dives");
 
@@ -86,3 +98,6 @@ export const getSettings = (): Promise<AppSettings> => request("/settings");
 /** Workers read the setting when each agent starts, so this applies to the next agent, not the next restart. */
 export const putSettings = (settings: AppSettings): Promise<AppSettings> =>
   request("/settings", { method: "PUT", body: JSON.stringify(settings) });
+
+/** Both queues' newest jobs, newest first: state from Redis, history (tries, steps, errors) from the workers. */
+export const listJobs = (): Promise<JobRead[]> => request("/jobs");

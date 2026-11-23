@@ -36,6 +36,9 @@ class DeepDive(DeepDiveBase, table=True):
     id: int | None = Field(default=None, primary_key=True)
     # The HTML lives in the bucket under sha256(html).html; the row only points at it.
     object_key: str = Field(max_length=128)
+    # The notebook's JSON, also content-addressed in the bucket. NULL: the notebook agent failed (the page still
+    # ships) or the page predates notebooks.
+    notebook_key: str | None = Field(default=None, max_length=128)
     # index serves GET /deep-dives (newest first)
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(UTC), sa_type=sa.DateTime(timezone=True), index=True
@@ -45,4 +48,5 @@ class DeepDive(DeepDiveBase, table=True):
 class DeepDiveRead(DeepDiveBase):
     id: int
     object_key: str
+    notebook_key: str | None
     created_at: datetime

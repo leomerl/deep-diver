@@ -3,3 +3,7 @@ DEEP_DIVE_GROUP = "deep_divers"
 DEEP_DIVE_DEAD_STREAM = "dead:deep_dive"  # jobs that failed JOB_MAX_DELIVERIES times, kept for inspection
 PAYLOAD_FIELD = "payload"  # one JSON field holding DeepDiveCreate
 DEDUP_PREFIX = "dedup:deep_dive:"  # + DeepDiveBase.target_key: a node, or a repo root, is queued at most once
+NOTEBOOK_STREAM = "jobs:notebook"  # payload: NotebookJob, in PAYLOAD_FIELD
+NOTEBOOK_GROUP = "notebook_writers"
+NOTEBOOK_DEAD_STREAM = "dead:notebook"
+NOTEBOOK_DEDUP_PREFIX = "dedup:notebook:"  # + deep dive id: one notebook job per page, freed only by dead-lettering

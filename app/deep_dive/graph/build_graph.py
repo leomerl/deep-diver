@@ -16,13 +16,15 @@ type VerifyStep = Callable[[Workspace, str, DeepDiveAnswer, str], DeepDiveAnswer
 
 WRITE = "write"
 VERIFY = "verify"
+STEPS = (WRITE, VERIFY)  # in run order; the jobs page draws the chain from it
 
 logger = logging.getLogger(__name__)
 
 
 def build_graph(write: WriteStep, verify: VerifyStep, checkpointer: BaseCheckpointSaver) -> DeepDiveGraph:
-    """write -> verify, with a checkpoint after each. Both are agent runs: the only expensive steps, so the only
-    ones worth never repeating. Render, upload and insert stay outside; they're cheap and need per-job resources."""
+    """write -> verify, with a checkpoint after each. Both are agent runs: the only expensive steps, so the only ones
+    worth never repeating. Render, upload and insert stay outside; they're cheap and need per-job resources. The
+    notebook is a job of its own (`generate_notebook`), queued once the page is saved."""
 
     def write_node(state: DeepDiveState, runtime: Runtime[AnswerContext]) -> DeepDiveState:
         answer = write(runtime.context.workspace, state["task"], state["label"])

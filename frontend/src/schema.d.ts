@@ -283,6 +283,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/deep-dives/{deep_dive_id}/notebook": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Notebook
+         * @description 404 when the deep dive has no notebook: its agent failed, or the page predates notebooks.
+         */
+        get: operations["get_notebook_deep_dives__deep_dive_id__notebook_get"];
+        put?: never;
+        /**
+         * Request Notebook
+         * @description Queue the page's notebook. Idempotent: a page already queued isn't queued again, and a page that has a notebook
+         *     makes the job a no-op. A dead-lettered job frees its marker, so this is how a failed notebook is retried.
+         */
+        post: operations["request_notebook_deep_dives__deep_dive_id__notebook_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/interview-questions": {
         parameters: {
             query?: never;
@@ -324,6 +349,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Jobs
+         * @description The newest jobs of every queue, newest first. State comes from Redis, history from job_events.
+         */
+        get: operations["list_jobs_jobs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -339,6 +384,15 @@ export interface components {
          */
         AppSettings: {
             agent_runtime: components["schemas"]["AgentRuntime"];
+        };
+        /**
+         * ChainStep
+         * @description One link of a job's chain on the jobs page: a checkpointed step, or a job the job queued.
+         */
+        ChainStep: {
+            /** Name */
+            name: string;
+            status: components["schemas"]["StepStatus"];
         };
         /**
          * DeepDiveCreate
@@ -363,6 +417,8 @@ export interface components {
             id: number;
             /** Object Key */
             object_key: string;
+            /** Notebook Key */
+            notebook_key: string | null;
             /**
              * Created At
              * Format: date-time
@@ -385,6 +441,8 @@ export interface components {
             id: number;
             /** Object Key */
             object_key: string;
+            /** Notebook Key */
+            notebook_key: string | null;
             /**
              * Created At
              * Format: date-time
@@ -450,6 +508,66 @@ export interface components {
             /** Repo Url */
             repo_url: string;
         };
+        /**
+         * JobEventKind
+         * @description What happened to a queued job, as the work loop saw it.
+         * @enum {string}
+         */
+        JobEventKind: "started" | "step" | "failed" | "done" | "dead_lettered";
+        /** JobEventRead */
+        JobEventRead: {
+            /** Stream */
+            stream: string;
+            /** Entry Id */
+            entry_id: string;
+            kind: components["schemas"]["JobEventKind"];
+            /** Delivery */
+            delivery: number;
+            /** Consumer */
+            consumer: string;
+            /** Detail */
+            detail?: string | null;
+            /** Id */
+            id: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /**
+         * JobRead
+         * @description A queued job: its state from Redis, its history from job_events.
+         */
+        JobRead: {
+            /** Stream */
+            stream: string;
+            /** Entry Id */
+            entry_id: string;
+            /** Label */
+            label: string;
+            state: components["schemas"]["JobState"];
+            /**
+             * Queued At
+             * Format: date-time
+             */
+            queued_at: string;
+            /** Deliveries */
+            deliveries: number;
+            /** Consumer */
+            consumer: string | null;
+            /** Chain */
+            chain: components["schemas"]["ChainStep"][];
+            /** Events */
+            events: components["schemas"]["JobEventRead"][];
+            follow_up?: components["schemas"]["JobRead"] | null;
+        };
+        /**
+         * JobState
+         * @description Where a job stands, derived from Redis alone (`stream_jobs`).
+         * @enum {string}
+         */
+        JobState: "queued" | "running" | "retrying" | "done" | "dead";
         /** NodeRead */
         NodeRead: {
             /** Name */
@@ -480,6 +598,46 @@ export interface components {
             id: number;
             /** Children */
             children: components["schemas"]["NodeRead"][];
+        };
+        /**
+         * NotebookBase
+         * @description A runnable notebook: the JSON stored in the bucket and the GET /deep-dives/{id}/notebook response.
+         *
+         *     Plain fields only. The agent's NotebookAnswer adds the checks; reading a stored notebook must not re-run them,
+         *     or tightening a rule would make every older notebook unreadable.
+         */
+        NotebookBase: {
+            /** Title */
+            title: string;
+            /** Cells */
+            cells: components["schemas"]["NotebookCellBase"][];
+        };
+        /** NotebookCellBase */
+        NotebookCellBase: {
+            /**
+             * Explanation
+             * @description What this cell shows and what to notice in its output, in one or two short paragraphs. Shown above the code.
+             */
+            explanation: string;
+            /**
+             * Code
+             * @description Self-contained Python that runs in the reader's browser.
+             */
+            code: string;
+            /**
+             * Mirrors
+             * @description The repo file whose mechanism this cell rebuilds, relative to the repo root. Null for a cell that only sets up or sums up.
+             */
+            mirrors?: string | null;
+        };
+        /**
+         * NotebookJob
+         * @description The notebook job payload; the worker re-validates it with the same class. The page must exist: the agent
+         *     works from it.
+         */
+        NotebookJob: {
+            /** Deep Dive Id */
+            deep_dive_id: number;
         };
         /**
          * RepoCreate
@@ -528,6 +686,11 @@ export interface components {
             /** Commit Sha */
             commit_sha: string;
         };
+        /**
+         * StepStatus
+         * @enum {string}
+         */
+        StepStatus: "passed" | "running" | "failed" | "waiting" | "skipped";
         /** UserRead */
         UserRead: {
             /** Github Id */
@@ -1060,6 +1223,68 @@ export interface operations {
             };
         };
     };
+    get_notebook_deep_dives__deep_dive_id__notebook_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                deep_dive_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotebookBase"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    request_notebook_deep_dives__deep_dive_id__notebook_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                deep_dive_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotebookJob"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_interview_questions_interview_questions_get: {
         parameters: {
             query?: never;
@@ -1129,6 +1354,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_jobs_jobs_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobRead"][];
                 };
             };
         };

@@ -4,15 +4,17 @@ import { AddRepoSheet } from "./AddRepoSheet";
 import { getMap, type RepoMap, type RepoRead } from "./api";
 import { DeepDiveList } from "./DeepDiveList";
 import { DeepDivePanel } from "./DeepDivePanel";
+import { Jobs } from "./Jobs";
 import { REPO_NODE_ID, type Selection } from "./layout";
 import { MapCanvas } from "./MapCanvas";
+import { NotebookList } from "./NotebookList";
 import { Practice } from "./Practice";
 import { Reindex } from "./Reindex";
 import { repoLabel } from "./repoLabel";
 import { RepoList } from "./RepoList";
 import { Settings } from "./Settings";
 
-const VIEWS = { map: "Map", deepDives: "Deep dives", practice: "Practice", settings: "Settings" } as const;
+const VIEWS = { map: "Map", deepDives: "Deep dives", notebooks: "Notebooks", practice: "Practice", jobs: "Jobs", settings: "Settings" } as const;
 type View = keyof typeof VIEWS;
 
 export function App() {
@@ -85,10 +87,24 @@ export function App() {
           </div>
         </section>
       )}
+      {view === "notebooks" && (
+        <section className="page">
+          <div className="page__inner">
+            <NotebookList />
+          </div>
+        </section>
+      )}
       {view === "practice" && (
         <section className="page">
           <div className="page__inner">
             <Practice />
+          </div>
+        </section>
+      )}
+      {view === "jobs" && (
+        <section className="page">
+          <div className="page__inner">
+            <Jobs />
           </div>
         </section>
       )}

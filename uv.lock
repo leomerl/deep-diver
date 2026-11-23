@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 5
 requires-python = ">=3.12"
 resolution-markers = [
     "python_full_version >= '3.15'",
@@ -478,6 +478,7 @@ dependencies = [
     { name = "langchain-core" },
     { name = "langgraph" },
     { name = "langgraph-checkpoint-postgres" },
+    { name = "mcp" },
     { name = "minio" },
     { name = "networkx" },
     { name = "psycopg", extra = ["binary"] },
@@ -507,6 +508,7 @@ requires-dist = [
     { name = "langchain-core", specifier = ">=1.8.3" },
     { name = "langgraph", specifier = ">=1.2.23" },
     { name = "langgraph-checkpoint-postgres", specifier = ">=3.2.1" },
+    { name = "mcp", specifier = ">=2.3.0" },
     { name = "minio", specifier = ">=7.2.20" },
     { name = "networkx", specifier = ">=3.7" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },

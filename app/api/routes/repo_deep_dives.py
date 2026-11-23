@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import HTMLResponse
-from sqlmodel import col, select
+from sqlmodel import Session, col, select
 
 from app.db import SessionDep
 from app.models import DeepDive, DeepDiveCreate, DeepDiveRead, Repo
@@ -30,13 +30,17 @@ def get_repo_deep_dive_html(repo_id: int, session: SessionDep, read: HtmlReaderD
     return html_response(_root_deep_dive(session, repo_id), read)
 
 
-def _root_deep_dive(session: SessionDep, repo_id: int) -> DeepDive:
+def find_root_deep_dive(session: Session, repo_id: int) -> DeepDive | None:
     # Served by the repos primary key, then the partial unique index uq_deep_dives_snapshot_root.
-    row = session.exec(
+    return session.exec(
         select(DeepDive)
         .join(Repo, col(Repo.current_snapshot_id) == col(DeepDive.snapshot_id))
         .where(Repo.id == repo_id, col(DeepDive.node_id).is_(None))
     ).first()
+
+
+def _root_deep_dive(session: SessionDep, repo_id: int) -> DeepDive:
+    row = find_root_deep_dive(session, repo_id)
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "no deep dive for this repo yet")
     return row
